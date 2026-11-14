@@ -422,6 +422,10 @@ App {
 			media_player: "speaker", person: "person", device_tracker: "person", binary_sensor: "eye", input_boolean: "toggle",
 			automation: "bolt", vacuum: "robot", humidifier: "droplet", camera: "camera", weather: "sun"};
 		if (d === "climate" && attr(id, "hvac_action") === "heating") return "flame";
+		// a motion sensor: someone moving, or the same crossed out (as mdi:motion-sensor / motion-sensor-off)
+		if (d === "binary_sensor" && deviceClass(id) === "motion") return haStates[id] && haStates[id].state === "on" ? "motion" : "motion-off";
+		// a door contact: open or closed (as mdi:door-open / door-closed)
+		if (d === "binary_sensor" && deviceClass(id) === "door") return haStates[id] && haStates[id].state === "on" ? "door-open" : "door-closed";
 		if (map[d]) return map[d];
 		if (d === "sensor" || d === "input_number" || d === "number") {
 			if (unit === "°C" || unit === "°F") return "thermometer";
@@ -430,6 +434,14 @@ App {
 			return "gauge";
 		}
 		return "generic";
+	}
+
+	// Home Assistant's device_class (motion, door, …): from the state, else from the list of all entities
+	function deviceClass(id) {
+		var c = attr(id, "device_class");
+		if (c) return c;
+		var e = allIndex[id];
+		return e ? e.deviceClass || "" : "";
 	}
 
 	function iconUrl(id, dim) {
@@ -607,6 +619,7 @@ App {
 		media_player: ["media_title", "media_artist", "media_album_name", "app_name", "volume_level", "is_volume_muted",
 			"entity_picture", "source", "source_list"],
 		camera: ["entity_picture"],
+		binary_sensor: ["device_class"],
 		fan: ["percentage", "percentage_step", "preset_mode", "preset_modes", "oscillating", "direction"],
 		person: ["latitude", "longitude", "gps_accuracy", "entity_picture"],
 		device_tracker: ["latitude", "longitude", "gps_accuracy", "entity_picture"]
@@ -1466,6 +1479,11 @@ App {
 		var d = domainOf(id);
 		if (d === "script" || d === "scene" || d === "button" || d === "input_button") return "";
 		if (d === "alarm_control_panel") return alarmStateText(v);
+		if (d === "binary_sensor" && (v === "on" || v === "off")) {
+			var dc = deviceClass(id);
+			if (dc === "motion") return v === "on" ? "Beweging" : "Geen beweging";
+			if (dc === "door" || dc === "window" || dc === "opening" || dc === "garage_door") return v === "on" ? "Open" : "Dicht";
+		}
 		if (d === "climate") {
 			var cur = attr(id, "current_temperature"), target = climateTargetText(id);
 			if (v === "off") return (typeof cur === "number" ? degrees(cur) + " · " : "") + "Uit";

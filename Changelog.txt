@@ -1,4 +1,7 @@
 1.2.1
+- Motion sensors (device_class motion): someone moving when on, crossed out when off (as mdi:motion-sensor / -off)
+- Door contacts (device_class door): an open or a closed door (as mdi:door-open / door-closed)
+- Their state in words: Beweging / Geen beweging, Open / Dicht (also for windows and garage doors)
 - Scenes have a palette icon (scripts keep the play icon)
 
 1.2.0
