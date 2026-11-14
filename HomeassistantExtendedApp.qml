@@ -134,6 +134,7 @@ App {
 		var cacheAge = loadEntitiesCache();
 		if (isConfigured()) {
 			pollStates();
+			liveStart();
 			if (cacheAge < 0 || cacheAge > allMaxAgeHours * 3600 * 1000) loadAllEntities();
 			loadEnergyHistory();
 		}
@@ -233,9 +234,12 @@ App {
 		connected = false;
 		lastError = "";
 		haStates = {};
+		liveFailed = false;
+		liveStop();
 		if (isConfigured()) {
 			pollStates();
 			loadAllEntities();
+			liveStart();
 		}
 		broadcastState();
 	}
@@ -596,6 +600,8 @@ App {
 	function pollStates() {
 		var list = pollIds();
 		if (!isConfigured() || list.length === 0) return;
+		if (liveConnected) liveSubscribe();            // the selection may have changed: the live updates follow it
+		else if (!haSocket.active && !liveReconnect.running) liveStart();
 		var ids = [];
 		for (var i = 0; i < list.length; i++) ids.push(jsonString(list[i]));
 		var tpl = "{%- set ext = " + JSON.stringify(extKeys) + " -%}"
@@ -642,6 +648,177 @@ App {
 		var out = {};
 		for (var i = 0; i < keys.length && i < values.length; i++) out[keys[i]] = values[i];
 		return out;
+	}
+
+	// ======================================================================
+	// live updates: Home Assistant's WebSocket API (subscribe_entities). A change in Home Assistant shows at
+	// once, without asking every 10 seconds. Without it (no connection, an old Home Assistant): polling.
+	// ======================================================================
+
+	property bool liveConnected: false
+	// with live updates a poll only now and then (names, areas); without them every pollSeconds
+	property int pollInterval: liveConnected ? 5 * 60 * 1000 : pollSeconds * 1000
+	property bool liveFailed: false           // Home Assistant has no subscribe_entities (older than 2022.4): polling only
+	property int liveMsgId: 1
+	property int liveSubId: 0
+	property string liveSubKey: ""            // the ids subscribed to, joined
+	property var liveRaw: ({})                // entity id -> {s, a (all attributes), lc}
+	property int liveRetry: 0
+
+	function liveUrl() { return haUrl.replace(/^http/, "ws") + "/api/websocket"; }
+
+	function liveStart() {
+		if (!isConfigured() || liveFailed || pollIds().length === 0) return;
+		liveReconnect.stop();
+		haSocket.active = false;
+		haSocket.url = liveUrl();
+		haSocket.active = true;
+	}
+
+	function liveStop() {
+		liveReconnect.stop();
+		liveConnected = false;
+		liveSubId = 0;
+		liveSubKey = "";
+		haSocket.active = false;
+	}
+
+	function liveSend(obj) {
+		try { haSocket.sendTextMessage(JSON.stringify(obj)); } catch (e) {}
+	}
+
+	// (again) subscribe to the chosen entities and the Energie tab's
+	function liveSubscribe() {
+		var ids = pollIds();
+		var key = ids.join(",");
+		if (key === liveSubKey) return;
+		if (liveSubId) liveSend({id: liveMsgId++, type: "unsubscribe_events", subscription: liveSubId});
+		liveSubKey = key;
+		liveRaw = {};
+		if (ids.length === 0) { liveSubId = 0; return; }
+		liveSubId = liveMsgId++;
+		liveSend({id: liveSubId, type: "subscribe_entities", entity_ids: ids});
+	}
+
+	function liveMessage(text) {
+		var m;
+		try { m = JSON.parse(text); } catch (e) { return; }
+		if (m.type === "auth_required") {
+			liveSend({type: "auth", access_token: haToken});
+		} else if (m.type === "auth_ok") {
+			liveRetry = 0;
+			liveConnected = true;
+			liveSubKey = "";
+			liveSubscribe();
+		} else if (m.type === "auth_invalid") {
+			lastError = "token ongeldig (401)";
+			liveStop();
+			liveReconnect.interval = 5 * 60 * 1000;
+			liveReconnect.restart();
+		} else if (m.type === "result" && m.id === liveSubId && !m.success) {
+			// an older Home Assistant: no subscribe_entities. Polling it is
+			console.log("homeassistant: no live updates (" + (m.error ? m.error.message : "?") + "), polling");
+			liveFailed = true;
+			liveStop();
+		} else if (m.type === "event" && m.id === liveSubId && m.event) {
+			applyLive(m.event);
+		}
+	}
+
+	// subscribe_entities sends {a: {id: {s, a, lc}}} (everything, at first), {c: {id: {"+": {s, a, lc}, "-": {a: [keys]}}}} (changes)
+	// and {r: [ids]} (removed)
+	function applyLive(ev) {
+		var raw = liveRaw;
+		var changed = [];
+		var id;
+		if (ev.a) {
+			for (id in ev.a) {
+				raw[id] = {s: ev.a[id].s, a: ev.a[id].a || {}, lc: ev.a[id].lc || 0};
+				changed.push(id);
+			}
+		}
+		if (ev.c) {
+			for (id in ev.c) {
+				var d = ev.c[id];
+				var r = raw[id] || {s: "", a: {}, lc: 0};
+				var plus = d["+"];
+				if (plus) {
+					if (plus.s !== undefined) r.s = plus.s;
+					if (plus.lc !== undefined) r.lc = plus.lc;
+					if (plus.a) for (var k in plus.a) r.a[k] = plus.a[k];
+				}
+				var minus = d["-"];
+				if (minus && minus.a) for (var j = 0; j < minus.a.length; j++) delete r.a[minus.a[j]];
+				raw[id] = r;
+				changed.push(id);
+			}
+		}
+		if (ev.r) {
+			for (var q = 0; q < ev.r.length; q++) {
+				raw[ev.r[q]] = {s: "unavailable", a: raw[ev.r[q]] ? raw[ev.r[q]].a : {}, lc: 0};
+				changed.push(ev.r[q]);
+			}
+		}
+		liveRaw = raw;
+		if (changed.length === 0) return;
+		var map = haStates;
+		var newWeather = false;
+		for (var n = 0; n < changed.length; n++) {
+			id = changed[n];
+			map[id] = liveState(id, raw[id], map[id]);
+			applyHold(map, id);
+			if (domainOf(id) === "weather" && !forecasts[id]) newWeather = true;
+		}
+		haStates = map;
+		connected = true;
+		lastError = "";
+		statesUpdated();
+		if (newWeather) loadForecasts();
+	}
+
+	// Home Assistant's state and attributes -> what the cards read (the same as a poll gives)
+	function liveState(id, r, prev) {
+		var a = r.a || {};
+		var d = domainOf(id);
+		var keys = extKeys[d] || [];
+		var values = [];
+		for (var i = 0; i < keys.length; i++) values.push(a[keys[i]] === undefined ? null : a[keys[i]]);
+		var area = prev && prev.area ? prev.area : (allIndex[id] ? allIndex[id].area : "");
+		return {state: r.s, unit: a.unit_of_measurement || "", name: a.friendly_name || "", area: area || "",
+			codeFormat: a.code_format || "", codeArmRequired: a.code_arm_required !== false, features: a.supported_features || 0,
+			light: d === "light" ? lightInfo([a.brightness, a.supported_color_modes, a.hs_color, a.color_temp_kelvin,
+				a.min_color_temp_kelvin, a.max_color_temp_kelvin, a.color_mode]) : null,
+			attrs: extAttrs(id, values), changed: d === "person" || d === "device_tracker" ? r.lc || 0 : 0};
+	}
+
+	WebSocket {
+		id: haSocket
+		active: false
+		onTextMessageReceived: liveMessage(message)
+		onStatusChanged: {
+			if (status !== WebSocket.Closed && status !== WebSocket.Error) return;
+			var was = liveConnected;
+			liveConnected = false;
+			liveSubId = 0;
+			liveSubKey = "";
+			if (!active || liveFailed || !isConfigured()) return;
+			active = false;
+			// try again: 2, 4, 8 … seconds, at most a minute; polling meanwhile
+			liveReconnect.interval = Math.min(60000, 2000 * Math.pow(2, Math.min(liveRetry, 5)));
+			liveRetry++;
+			liveReconnect.restart();
+			if (was) pollStates();
+		}
+	}
+
+	Timer { id: liveReconnect; onTriggered: liveStart() }
+
+	Timer {
+		// camera images: renewed as often as a poll would (live updates don't change the picture)
+		interval: pollSeconds * 1000
+		repeat: true
+		running: liveConnected
+		onTriggered: cameraTick++
 	}
 
 	// ======================================================================
@@ -1389,7 +1566,7 @@ App {
 
 	Timer {
 		id: pollTimer
-		interval: pollSeconds * 1000
+		interval: pollInterval
 		repeat: true
 		running: isConfigured() && pollIds().length > 0
 		onTriggered: pollStates()
@@ -1401,6 +1578,7 @@ App {
 		id: refreshSoon
 		interval: 1000
 		onTriggered: {
+			if (liveConnected) return;                 // Home Assistant tells us itself
 			pollStates();
 			refreshLater.restart();
 		}

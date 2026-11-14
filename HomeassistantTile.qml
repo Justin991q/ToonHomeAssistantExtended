@@ -1,13 +1,16 @@
 import QtQuick 2.1
 import qb.components 1.0
 
-// the favourites (no favourites: the first chosen entities); a row that can switch switches,
-// the rest of the tile opens the full list
+// the favourites as 2x2 mini cards (no favourites: the first chosen entities), in the main screen's style:
+// icon, name, state, warm yellow when on. A tap on a card does what the card on the main screen does
+// (switch, run, open); the rest of the tile opens the main screen.
 Tile {
 	id: homeassistantTile
 
-	property int rowHeight: isNxt ? 32 : 26
-	property int maxRows: Math.max(1, Math.floor((height - listColumn.y - (isNxt ? 8 : 6)) / rowHeight))
+	property int rev: 0
+	property variant ids: []
+	property int gap: isNxt ? 8 : 6
+	property int margin: isNxt ? 10 : 8
 
 	onClicked: app.openMain()
 
@@ -20,18 +23,12 @@ Tile {
 		app.statesUpdated.disconnect(update);
 		app.selectionChanged.disconnect(update);
 	}
-	onMaxRowsChanged: update()
 
 	function update() {
-		var ids = app.favouriteList();
-		rowModel.clear();
-		for (var i = 0; i < ids.length && i < maxRows; i++) {
-			rowModel.append({entityId: ids[i], name: app.displayName(ids[i]), value: app.stateText(ids[i]),
-				on: app.isOn(ids[i]), action: app.actionOf(ids[i])});
-		}
+		var list = app.favouriteList();
+		ids = list.slice(0, 4);
+		rev++;
 	}
-
-	ListModel { id: rowModel }
 
 	Text {
 		id: tileTitle
@@ -43,7 +40,7 @@ Tile {
 		}
 		font.family: qfont.regular.name
 		font.pixelSize: qfont.tileTitle
-		color: dimmableColors.tileTitleColor
+		color: dimState ? "white" : dimmableColors.tileTitleColor
 		text: "Home-Assistant"
 		width: Math.min(implicitWidth, parent.width - tileLogo.width - tileLogo.anchors.rightMargin - 20)
 		elide: Text.ElideRight
@@ -69,75 +66,98 @@ Tile {
 		width: parent.width - 20
 		horizontalAlignment: Text.AlignHCenter
 		wrapMode: Text.WordWrap
-		visible: rowModel.count === 0
+		visible: ids.length === 0
 		font.family: qfont.regular.name
 		font.pixelSize: isNxt ? 18 : 15
-		color: dimmableColors.tileTextColor
+		color: dimState ? "white" : dimmableColors.tileTextColor
 		text: !app.isConfigured() ? "Tik om Home Assistant in te stellen"
 			: (app.entities.length === 0 ? "Kies entiteiten in de instellingen" : "")
 	}
 
-	Column {
-		id: listColumn
-		y: tileTitle.y + tileTitle.height + (isNxt ? 10 : 8)
+	// ---- the mini cards ----
+	Grid {
+		id: grid
+		columns: 2
+		spacing: homeassistantTile.gap
 		anchors {
+			top: tileTitle.bottom
+			topMargin: isNxt ? 10 : 7
 			left: parent.left
 			right: parent.right
-			leftMargin: isNxt ? 14 : 10
-			rightMargin: isNxt ? 14 : 10
+			bottom: errorText.visible ? errorText.top : parent.bottom
+			leftMargin: homeassistantTile.margin
+			rightMargin: homeassistantTile.margin
+			bottomMargin: homeassistantTile.margin
 		}
+		property real cellWidth: (width - spacing) / 2
+		property real cellHeight: (height - spacing) / 2
 
 		Repeater {
-			model: rowModel
+			model: homeassistantTile.ids
+			Rectangle {
+				id: mini
+				property string entityId: modelData
+				property bool lit: homeassistantTile.rev >= 0 && app.isLit(entityId)
+				property string action: homeassistantTile.rev >= 0 ? app.actionOf(entityId) : ""
 
-			Item {
-				width: listColumn.width
-				height: homeassistantTile.rowHeight
+				width: grid.cellWidth
+				height: grid.cellHeight
+				radius: isNxt ? 8 : 6
+				color: dimState ? "transparent" : (lit ? "#fde7c2" : (miniMouse.pressed ? "#ececec" : "#f6f6f6"))
+				border.width: lit && !dimState ? 2 : 1
+				border.color: dimState ? "#4a4a4a" : (lit ? "#f5a623" : "#e2e2e2")
 
-				Rectangle {
-					id: dot
-					width: isNxt ? 10 : 8
+				// icon on the left; on the right two lines: the name and the state (a sensor, a thermostat:
+				// its value big, then the name)
+				Image {
+					id: miniIcon
+					width: isNxt ? 26 : 20
 					height: width
-					radius: width / 2
-					anchors.verticalCenter: parent.verticalCenter
-					visible: model.action === "toggle"
-					color: model.on ? "#f5a623" : (dimState ? "#666666" : "#c8c8c8")
+					sourceSize.width: width
+					sourceSize.height: height
+					anchors { left: parent.left; leftMargin: isNxt ? 8 : 6; verticalCenter: parent.verticalCenter }
+					source: homeassistantTile.rev >= 0 ? app.iconUrl(mini.entityId, dimState) : ""
 				}
-				Text {
-					anchors {
-						left: dot.right
-						leftMargin: isNxt ? 8 : 6
-						right: valueText.left
-						rightMargin: 6
-						verticalCenter: parent.verticalCenter
+				Column {
+					property bool valueCard: homeassistantTile.rev >= 0 && app.isValueCard(mini.entityId)
+					anchors { left: miniIcon.right; leftMargin: isNxt ? 7 : 5; right: parent.right; rightMargin: isNxt ? 6 : 4; verticalCenter: parent.verticalCenter }
+					Text {
+						width: parent.width
+						elide: Text.ElideRight
+						font.family: parent.valueCard ? qfont.bold.name : qfont.semiBold.name
+						font.pixelSize: parent.valueCard ? (isNxt ? 17 : 14) : (isNxt ? 15 : 12)
+						color: dimState ? "white" : "#1d1d1b"
+						text: homeassistantTile.rev < 0 ? "" : (parent.valueCard ? app.valueText(mini.entityId) : app.displayName(mini.entityId))
 					}
-					elide: Text.ElideRight
-					font.family: qfont.regular.name
-					font.pixelSize: isNxt ? 18 : 15
-					color: dimmableColors.tileTextColor
-					text: model.name
-				}
-				Text {
-					id: valueText
-					anchors {
-						right: parent.right
-						verticalCenter: parent.verticalCenter
+					Text {
+						width: parent.width
+						elide: Text.ElideRight
+						visible: text !== ""
+						font.family: qfont.regular.name
+						font.pixelSize: isNxt ? 13 : 11
+						color: dimState ? "#bbbbbb" : (mini.lit ? "#8a5300" : "#6b6b6b")
+						text: {
+							if (homeassistantTile.rev < 0) return "";
+							if (parent.valueCard) return app.displayName(mini.entityId);
+							if (mini.action === "run" || mini.action === "press") return "Tik om te starten";
+							return app.stateText(mini.entityId);
+						}
 					}
-					font.family: qfont.bold.name
-					font.pixelSize: isNxt ? 18 : 15
-					color: dimmableColors.tileTextColor
-					text: model.action === "run" || model.action === "press" ? "Start" : model.value
 				}
 				MouseArea {
+					id: miniMouse
 					anchors.fill: parent
-					enabled: model.action !== ""
-					onClicked: app.activate(model.entityId)
+					onClicked: {
+						if (mini.action === "") app.openMain();      // read only: the main screen
+						else app.activate(mini.entityId);
+					}
 				}
 			}
 		}
 	}
 
 	Text {
+		id: errorText
 		anchors {
 			bottom: parent.bottom
 			bottomMargin: 4
@@ -147,6 +167,6 @@ Tile {
 		font.family: qfont.regular.name
 		font.pixelSize: isNxt ? 14 : 12
 		color: "#d0021b"
-		text: app.lastError
+		text: app.friendlyError(app.lastError)
 	}
 }

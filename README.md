@@ -17,7 +17,10 @@ the order of the areas. A web editor makes setup easy when there are many entiti
     answers. If the command fails, the card goes back and a short notice appears at the bottom.
   - **Sensors** show their value in large text: "21,4 °C", "350 W".
   - Each type has its own icon: lamp, plug, thermometer, blinds, shield, …
-  - A small dot at the bottom left shows the connection. Words only appear when something is wrong.
+  - A small dot at the bottom left shows the connection ("Verbonden · live" with live updates). Words
+    about a problem only appear when something is wrong.
+  - **Live**: a change in Home Assistant (a lamp switched with its own switch, a sensor's new value) shows
+    on the Toon at once.
 
 | Favourites | A failed command |
 |---|---|
@@ -96,8 +99,9 @@ the order of the areas. A web editor makes setup easy when there are many entiti
 |---|---|
 | ![The Energie tab](screenshots/energy.png) | ![Choosing the energy entities on the Toon](screenshots/energy-settings.png) |
 
-- **A tile** with your favourites, each with its state. Tap a row to switch it; the rest of the tile
-  opens the main screen.
+- **A tile** with your first four favourites as mini cards (icon, name, state; warm yellow when on), in the
+  main screen's style. A tap on a mini card does what the card does (switch, run, open its screen); the rest
+  of the tile opens the main screen.
 - **The Home Assistant icon in the systray** (optional, in *Instellingen* or the web editor). A tap
   opens the main screen. A red dot appears on it when one of your alarm panels goes off.
 
@@ -169,11 +173,17 @@ local pages.
 
 ## How it talks to Home Assistant
 
-Only the REST API, with the token as a `Bearer` header:
+**Live updates** over Home Assistant's WebSocket API (`ws://<home assistant>/api/websocket`, `wss://` for
+https): the app logs in with the token and subscribes to the chosen entities and the Energie tab's with
+`subscribe_entities` (Home Assistant 2022.4 or newer). Home Assistant then sends every change at once. When the
+connection drops, the app polls every `pollSeconds` and connects again (after 2, 4, 8 … seconds, at most a
+minute). With an older Home Assistant it only polls. While live, it still polls every 5 minutes (names, areas).
+
+Everything else goes over the REST API, with the token as a `Bearer` header:
 - `GET /api/` for the connection test;
 - `POST /api/template` to get all entities with their area and Home Assistant's area list (when choosing,
   and every 30 minutes). It also fetches the states of the chosen entities in **one small request**
-  every 10 seconds (`pollSeconds` in the settings), with the alarm attributes `code_format`,
+  every 10 seconds when there are no live updates (`pollSeconds` in the settings), with the alarm attributes `code_format`,
   `code_arm_required` and `supported_features`, for lights `brightness`, `supported_color_modes`,
   `hs_color`, `color_temp_kelvin` and its range, and the attributes a thermostat, humidifier, speaker,
   camera, person or weather card needs;
@@ -200,7 +210,7 @@ can't send). For another map, put its tile address in the settings file as `"map
 | File | What |
 |---|---|
 | `HomeassistantExtendedApp.qml` | settings, Home Assistant client, polling, alarm commands, web editor server |
-| `HomeassistantTile.qml` | the tile with favourites |
+| `HomeassistantTile.qml` | the tile: four favourites as mini cards |
 | `HomeassistantScreen.qml` | the main screen: area tabs and pages of cards |
 | `HaCard.qml` | a card: icon, name, state, tap feedback |
 | `HaAlarmCard.qml` | the double card of an alarm panel, with its buttons |
@@ -239,5 +249,6 @@ against a fake Home Assistant: connection test, choosing/renaming/favourites, so
 the main screen (tabs, pages, value cards, tapping a card, the notice after a failed command), the empty
 screen, the tile, the systray option, alarm panels (the card and the screen) with and without a code,
 light brightness, colour and colour temperature, fans, thermostats and humidifiers, speakers, weather, cameras,
-persons with the map, the Energie tab (today's totals from the history, its settings, the web editor), and
-the entity list cache.
+persons with the map, the Energie tab (today's totals from the history, its settings, the web editor), the
+entity list cache, and the live updates (the fake Home Assistant has a WebSocket API too: pushes, a dropped
+connection, polling meanwhile, connecting again).

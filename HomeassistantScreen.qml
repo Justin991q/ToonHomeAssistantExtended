@@ -194,7 +194,7 @@ Screen {
 				font.family: qfont.regular.name
 				font.pixelSize: isNxt ? 14 : 12
 				color: app.connected ? "#8a8a8a" : "#d0021b"
-				text: app.connected ? "Verbonden" : app.friendlyError(app.lastError || "geen verbinding")
+				text: app.connected ? (app.liveConnected ? "Verbonden · live" : "Verbonden") : app.friendlyError(app.lastError || "geen verbinding")
 			}
 		}
 	}
