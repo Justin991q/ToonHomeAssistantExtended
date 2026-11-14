@@ -17,7 +17,7 @@ Screen {
 	onShown: {
 		app.allEntitiesLoaded.connect(refresh);
 		app.selectionChanged.connect(refresh);
-		if (app.allEntities.length === 0) app.loadAllEntities();
+		if (app.allEntities.length === 0 || new Date().getTime() - app.allVersion > 3600 * 1000) app.loadAllEntities();
 		refresh();
 	}
 	onHidden: {

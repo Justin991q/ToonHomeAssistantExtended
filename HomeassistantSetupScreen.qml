@@ -192,11 +192,38 @@ Screen {
 		}
 		onClicked: stage.openFullscreen(app.energySetupScreenUrl)
 	}
+	// the cached list of all entities: forget it and fetch it again (after changes in Home Assistant)
+	StandardButton {
+		id: clearCacheButton
+		property bool cleared: false
+		text: "Cache wissen"
+		enabled: app.isConfigured() && !app.loadingAll
+		anchors {
+			verticalCenter: chooseButton.verticalCenter
+			left: energyButton.right
+			leftMargin: 16
+		}
+		onClicked: { cleared = true; app.clearEntitiesCache(); }
+	}
+	Text {
+		visible: clearCacheButton.cleared && app.isConfigured()
+		anchors {
+			verticalCenter: chooseButton.verticalCenter
+			left: clearCacheButton.right
+			leftMargin: 12
+			right: introText.right
+		}
+		wrapMode: Text.WordWrap
+		font.family: qfont.regular.name
+		font.pixelSize: isNxt ? 15 : 12
+		color: colors.singleLabelLeftText
+		text: app.loadingAll ? "Entiteiten ophalen…" : (app.allEntities.length > 0 ? app.allEntities.length + " entiteiten opgehaald" : app.friendlyError(app.lastError || "geen verbinding"))
+	}
 	Text {
 		visible: !app.isConfigured()
 		anchors {
 			verticalCenter: chooseButton.verticalCenter
-			left: energyButton.right
+			left: clearCacheButton.right
 			leftMargin: 16
 			right: introText.right
 		}

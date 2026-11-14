@@ -75,7 +75,12 @@ App {
 
 	// ---- live data ----
 	property variant haStates: ({})             // entity id -> {state, unit, name (HA's), area}
-	property variant allEntities: []          // everything HA has: [{id, name, area, state, domain}] (entity chooser, web editor)
+	property variant allEntities: []          // everything HA has: [{id, name, area, state, domain, unit, deviceClass}] (entity chooser, web editor)
+	property var allIndex: ({})                // entity id -> its entry in allEntities (looking up without walking the list)
+	property var chosenIndex: ({})             // entity id -> its position in entities
+	property double allVersion: 0              // when allEntities was fetched (ms): the web editor keeps its own copy until this changes
+	property string allMessage: ""             // the web editor's "entities" message, made once per fetch
+	property int allMaxAgeHours: 6             // the cached list is fetched again after this, or when you ask (⟳, Entiteiten kiezen)
 	property variant areaNames: []            // HA's areas, in HA's order
 	property bool connected: false
 	property string lastError: ""
@@ -94,6 +99,7 @@ App {
 	signal actionResult(string entityId, bool ok, string message)   // a tap's command came back: for the card's feedback
 
 	FileIO { id: settingsFile; source: "file:///mnt/data/tsc/homeassistantExtended.userSettings.json" }
+	FileIO { id: entitiesCache; source: "file:///mnt/data/tsc/homeassistantExtended.entities.json" }
 	FileIO { id: versionFile; source: "file:///qmf/qml/apps/homeassistantExtended/version.txt" }
 	FileIO { id: pageSource; source: "file:///qmf/qml/apps/homeassistantExtended/webeditor.html" }
 	FileIO { id: pageTarget; source: "file:///qmf/www/" + webPage }
@@ -124,11 +130,18 @@ App {
 		publishWebPage();
 		openFirewallPort();
 		toonAddress = findToonAddress();
+		var cacheAge = loadEntitiesCache();
 		if (isConfigured()) {
 			pollStates();
-			loadAllEntities();
+			if (cacheAge < 0 || cacheAge > allMaxAgeHours * 3600 * 1000) loadAllEntities();
 			loadEnergyHistory();
 		}
+	}
+
+	onEntitiesChanged: {
+		var map = {};
+		for (var i = 0; i < entities.length; i++) map[entities[i].id] = i;
+		chosenIndex = map;
 	}
 
 	// ======================================================================
@@ -229,8 +242,8 @@ App {
 	// ======================================================================
 
 	function indexOf(id) {
-		for (var i = 0; i < entities.length; i++) if (entities[i].id === id) return i;
-		return -1;
+		var i = chosenIndex[id];
+		return i === undefined ? -1 : i;
 	}
 
 	function isSelected(id) { return indexOf(id) >= 0; }
@@ -276,15 +289,15 @@ App {
 		if (i >= 0 && entities[i].name) return entities[i].name;
 		var s = haStates[id];
 		if (s && s.name) return s.name;
-		for (var j = 0; j < allEntities.length; j++) if (allEntities[j].id === id && allEntities[j].name) return allEntities[j].name;
-		return id;
+		var e = allIndex[id];
+		return e && e.name ? e.name : id;
 	}
 
 	function areaOf(id) {
 		var s = haStates[id];
 		if (s && s.area) return s.area;
-		for (var j = 0; j < allEntities.length; j++) if (allEntities[j].id === id) return allEntities[j].area || "";
-		return "";
+		var e = allIndex[id];
+		return e ? e.area || "" : "";
 	}
 
 	// the chosen entities as the screen shows them: [{id, name, area, fav, section}] sorted by sortMode
@@ -846,19 +859,64 @@ App {
 				broadcastState();
 				return;
 			}
-			var list = [];
-			for (var i = 0; i < res.entities.length; i++) {
-				var r = res.entities[i];
-				list.push({id: r[0], name: r[1] || "", area: r[2] || "", state: r[3], domain: r[0].split(".")[0], unit: r[4] || "", deviceClass: r[5] || ""});
-			}
-			list.sort(function(a, b) { return a.id < b.id ? -1 : (a.id > b.id ? 1 : 0); });
-			allEntities = list;
-			areaNames = res.areas || [];
+			setAllEntities(res.entities, res.areas || [], new Date().getTime());
 			connected = true;
+			saveEntitiesCache(res.entities);
 			allEntitiesLoaded();
 			selectionChanged();
 			broadcastState();
 		});
+	}
+
+	// rows [id, name, area, state, unit, device_class] (HA's answer, or the cache) -> allEntities, the index and
+	// the web editor's message
+	function setAllEntities(rows, areas, version) {
+		var list = [], index = {};
+		for (var i = 0; i < rows.length; i++) {
+			var r = rows[i];
+			var e = {id: r[0], name: r[1] || "", area: r[2] || "", state: r[3], domain: r[0].split(".")[0], unit: r[4] || "", deviceClass: r[5] || ""};
+			list.push(e);
+			index[e.id] = e;
+		}
+		list.sort(function(a, b) { return a.id < b.id ? -1 : (a.id > b.id ? 1 : 0); });
+		allIndex = index;
+		allEntities = list;
+		areaNames = areas;
+		allVersion = version;
+		var compact = [];
+		for (var k = 0; k < list.length; k++) compact.push([list[k].id, list[k].name, list[k].area, list[k].state, list[k].unit]);
+		allMessage = JSON.stringify({type: "entities", app: "homeassistantExtended", version: version, list: compact});
+	}
+
+	function saveEntitiesCache(rows) {
+		try {
+			entitiesCache.write(JSON.stringify({url: haUrl, time: allVersion, areas: areaNames, rows: rows}));
+		} catch (e) {}
+	}
+
+	// forget the cached list (file and memory) and fetch it again from Home Assistant: e.g. after renaming
+	// or moving entities in Home Assistant. The web editor's copy goes too: its version no longer matches.
+	function clearEntitiesCache() {
+		try { entitiesCache.write(""); } catch (e) {}
+		allIndex = {};
+		allEntities = [];
+		allMessage = "";
+		allVersion = 0;
+		allEntitiesLoaded();
+		broadcastState();
+		loadAllEntities();
+	}
+
+	// the list from the last time (for this Home Assistant): the age in ms, or -1 when there is none
+	function loadEntitiesCache() {
+		try {
+			var c = JSON.parse(entitiesCache.read());
+			if (!c || c.url !== haUrl || !c.rows) return -1;
+			setAllEntities(c.rows, c.areas || [], c.time || 0);
+			return new Date().getTime() - (c.time || 0);
+		} catch (e) {
+			return -1;
+		}
 	}
 
 	// ======================================================================
@@ -1130,6 +1188,19 @@ App {
 		});
 	}
 
+	// the Toon's keyboard with another word on its button ("Zoek" instead of "Opslaan"): the firmware sets
+	// its own word when the keyboard shows, so ours goes on right after it, only this once
+	function openKeyboard(title, text, onDone, buttonText) {
+		if (buttonText) {
+			var relabel = function() {
+				qkeyboard.shown.disconnect(relabel);
+				qkeyboard.addCustomTopRightButton(buttonText);
+			};
+			qkeyboard.shown.connect(relabel);
+		}
+		qkeyboard.open(title, text, onDone);
+	}
+
 	function openLight(id) {
 		stage.openFullscreen(lightScreenUrl, {entityId: id});
 	}
@@ -1315,11 +1386,12 @@ App {
 	}
 
 	Timer {
-		// the list of all entities changes rarely: every 30 minutes, and when the web editor asks
+		// the list of all entities changes rarely: fetched again when it is older than allMaxAgeHours, and when
+		// you ask (⟳ in the web editor, opening Entiteiten kiezen)
 		interval: 30 * 60 * 1000
 		repeat: true
 		running: isConfigured()
-		onTriggered: loadAllEntities()
+		onTriggered: if (new Date().getTime() - allVersion > allMaxAgeHours * 3600 * 1000) loadAllEntities()
 	}
 
 	// ======================================================================
@@ -1402,7 +1474,8 @@ App {
 			energyFields: energyFields(),
 			entities: entities,
 			areas: areaNames,
-			all: allEntities
+			allVersion: allVersion,              // the list of all entities comes apart ("entities"), only when the page's copy is older
+			allCount: allEntities.length
 		});
 	}
 
@@ -1429,6 +1502,12 @@ App {
 		try { m = JSON.parse(text); } catch (e) { return; }
 		if (m.type === "get") {
 			sendTo(socket, stateMessage());
+		} else if (m.type === "entities") {
+			// the page has a copy of this version (its browser keeps it): no need to send 100 kB again
+			if (m.version === allVersion && allVersion > 0) sendTo(socket, JSON.stringify({type: "entities", app: "homeassistantExtended", version: allVersion, same: true}));
+			else if (allMessage) sendTo(socket, allMessage);
+		} else if (m.type === "clearCache") {
+			clearEntitiesCache();
 		} else if (m.type === "refresh") {
 			loadAllEntities();
 			sendTo(socket, stateMessage());
@@ -1439,6 +1518,21 @@ App {
 		} else if (m.type === "connection") {
 			setConnection(m.url, m.token);
 		} else if (m.type === "save") {
+			// answer first, then the work (saving, the screens): the page doesn't wait for the slow part
+			sendTo(socket, JSON.stringify({type: "saved"}));
+			pendingSave = m;
+			saveLater.restart();
+		}
+	}
+
+	property var pendingSave: null
+	Timer {
+		id: saveLater
+		interval: 50
+		onTriggered: {
+			var m = pendingSave;
+			pendingSave = null;
+			if (!m) return;
 			if (m.sortMode) sortMode = m.sortMode;
 			if (m.systray !== undefined) enableSystray = m.systray === true;
 			if (m.areaOrder) areaOrder = m.areaOrder;
@@ -1448,7 +1542,6 @@ App {
 				loadEnergyHistory();
 			}
 			setEntities(m.entities || []);
-			sendTo(socket, JSON.stringify({type: "saved"}));
 		}
 	}
 

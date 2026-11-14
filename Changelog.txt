@@ -1,5 +1,11 @@
 1.1.2
 - Fans: a tap on the card (or the tile) opens the fan screen instead of switching the fan
+- Faster with many entities (hundreds): the list of all entities is cached on the Toon (fetched again after
+  6 hours, or when you ask) and looked up by index; the web editor gets that list apart from the state and
+  keeps it in the browser, so a state update is ~3 kB instead of ~100 kB; saving from the web editor answers
+  at once; the entity chooser opens much faster
+- Cache wissen: on the settings screen and in the web editor, forgets the cached entity list and fetches it again
+- Searching in the entity chooser: the keyboard's button says "Zoek"
 
 1.1.1
 - A lamp that fades out no longer jumps back to "Aan" for a moment after you switch it off: the new state

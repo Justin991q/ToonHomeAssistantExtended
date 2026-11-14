@@ -164,6 +164,10 @@ button:disabled { opacity: .45; cursor: default; }
 		<div class="row">
 			<label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="systray"> Home Assistant-icoon in de systray van de Toon (bovenbalk)</label>
 		</div>
+		<div class="row">
+			<button id="clearCacheBtn" title="De bewaarde lijst van alle entiteiten vergeten (op de Toon en in deze browser) en opnieuw ophalen uit Home Assistant">Cache wissen</button>
+			<span class="msg" id="cacheMsg" style="color:var(--muted)">De lijst van alle entiteiten wordt bewaard. Na wijzigingen in Home Assistant: wissen en opnieuw ophalen.</span>
+		</div>
 	</section>
 
 	<section class="card" id="addCard">
@@ -220,6 +224,28 @@ let areaOrder = [];       // working copy of your area order
 let view = null;          // phones: the part shown (chosen, add, energy, conn)
 let energy = {};          // working copy of the Energie tab's entities: {power: [ids], usage: [...], ...}
 
+// all entities of Home Assistant: big, so the Toon sends them apart, and only when this browser's copy is older
+let allList = [];
+let allVersion = -1;
+const CACHE_KEY = "homeassistantExtended.entities";
+const fromCompact = (rows) => rows.map(r => ({id: r[0], name: r[1], area: r[2], state: r[3], unit: r[4], domain: r[0].split(".")[0]}));
+try {
+	const c = JSON.parse(localStorage.getItem(CACHE_KEY) || "null");
+	if (c && c.list) { allList = fromCompact(c.list); allVersion = c.version; }
+} catch (e) {}
+function onEntities(m) {
+	if (!m.same && m.list && m.list.length && $("cacheMsg").textContent.indexOf("Gewist") === 0) $("cacheMsg").textContent = m.list.length + " entiteiten opnieuw opgehaald.";
+	if (!m.same) {
+		allList = fromCompact(m.list || []);
+		allVersion = m.version;
+		try { localStorage.setItem(CACHE_KEY, JSON.stringify({version: m.version, list: m.list})); } catch (e) {}
+	}
+	if (!server) return;
+	server.all = allList;
+	fillFilters();
+	render();
+}
+
 function setView(v) {
 	view = v;
 	document.body.dataset.view = v;
@@ -243,6 +269,7 @@ function connect() {
 		let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
 		if (m.type === "state" && m.app !== "homeassistantExtended") { setStatus("poort " + WS_PORT + " is van een andere app op de Toon", false); return; }
 		if (m.type === "state") onState(m);
+		else if (m.type === "entities") onEntities(m);
 		else if (m.type === "test") setConnMsg(m.message, m.ok);
 		else if (m.type === "saved") { dirty = false; updateSavebar(); setStatus("opgeslagen op Toon"); }
 	};
@@ -260,7 +287,9 @@ function setConnMsg(text, ok) {
 
 function onState(m) {
 	const first = server === null;
+	m.all = allList;
 	server = m;
+	if (m.allVersion !== allVersion) send({type: "entities", version: allVersion});   // ours is older (or none): ask for the list
 	$("dot").classList.toggle("on", !!m.connected);
 	setStatus(m.connected ? "Toon is verbonden met Home Assistant" + (m.version ? " · app " + m.version : "")
 		: (m.url ? "Toon: geen verbinding met Home Assistant" + (m.error ? " (" + m.error + ")" : "") : "Home Assistant nog niet ingesteld"), !!m.connected);
@@ -277,7 +306,8 @@ function onState(m) {
 }
 
 // ---- helpers ----
-const byId = () => { const map = {}; (server ? server.all : []).forEach(e => map[e.id] = e); return map; };
+let byIdMap = {}, byIdOf = null;
+const byId = () => { if (byIdOf !== allList) { byIdMap = {}; allList.forEach(e => byIdMap[e.id] = e); byIdOf = allList; } return byIdMap; };   // made once per list
 const isChosen = (id) => chosen.some(c => c.id === id);
 const areaRank = (a) => { if (!a) return 1e6; const own = areaOrder.indexOf(a); if (own >= 0) return own; const i = server.areas.indexOf(a); return i >= 0 ? 1000 + i : 5e5; };
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
@@ -450,6 +480,14 @@ $("systray").addEventListener("change", markDirty);
 $("areaReset").onclick = () => { areaOrder = []; markDirty(); render(); };
 $("saveBtn").onclick = () => send({type: "save", systray: $("systray").checked, areaOrder: areaOrder, energy: energy, entities: chosen.map(c => ({id: c.id, name: c.name.trim(), fav: c.fav}))});
 $("undoBtn").onclick = () => { dirty = false; updateSavebar(); onState(server); };
+$("clearCacheBtn").onclick = () => {
+	try { localStorage.removeItem(CACHE_KEY); } catch (e) {}
+	allList = []; allVersion = -1;
+	if (server) { server.all = allList; fillFilters(); render(); }
+	$("allCount").textContent = "(ophalen…)";
+	$("cacheMsg").textContent = "Gewist, de Toon haalt de entiteiten opnieuw op…";
+	send({type: "clearCache"});
+};
 $("refreshBtn").onclick = () => { $("allCount").textContent = "(ophalen…)"; send({type: "refresh"}); };
 $("testBtn").onclick = () => { setConnMsg("testen…"); send({type: "test", url: $("url").value.trim(), token: $("token").value.trim()}); };
 $("connBtn").onclick = () => {

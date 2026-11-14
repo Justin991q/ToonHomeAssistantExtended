@@ -151,6 +151,13 @@ In the web editor you can:
 
 Press **Opslaan op Toon** to save. The Toon updates right away.
 
+**Many entities:** the list of all Home Assistant entities (often hundreds) is big. The Toon keeps it in
+`homeassistantExtended.entities.json` and fetches it again after 6 hours, when you open *Entiteiten kiezen*
+with a list older than an hour, or with ⟳ in the web editor. The web editor gets the list once and keeps it
+in the browser; after that the Toon only sends the small state (which entities you chose, the connection).
+**Cache wissen** (on the Toon's settings screen, and in the web editor under Verbinding) forgets the list on
+the Toon and in the browser and fetches it again: handy after renaming or moving entities in Home Assistant.
+
 If port 8137 is already in use, add `"webPort": 8140` (or any free port) to the settings file and restart
 the GUI. The app writes the port into the published page.
 
@@ -218,7 +225,8 @@ can't send). For another map, put its tile address in the settings file as `"map
 
 Settings: `/mnt/data/tsc/homeassistantExtended.userSettings.json` (`url`, `token`, `entities: [{id, name, fav}]`,
 `areaOrder`, `energy: {power, usage, export, solarPower, solar, gas, water}` (lists of entity ids),
-`enableSystray`, `pollSeconds`, `webPort`, `mapTileUrl`).
+`enableSystray`, `pollSeconds`, `webPort`, `mapTileUrl`). The cached list of all entities:
+`/mnt/data/tsc/homeassistantExtended.entities.json`.
 
 Written for the Toon's Qt 5.11, so the QML uses only ES5 JavaScript.
 
@@ -229,4 +237,5 @@ against a fake Home Assistant: connection test, choosing/renaming/favourites, so
 the main screen (tabs, pages, value cards, tapping a card, the notice after a failed command), the empty
 screen, the tile, the systray option, alarm panels (the card and the screen) with and without a code,
 light brightness, colour and colour temperature, fans, thermostats and humidifiers, speakers, weather, cameras,
-persons with the map, and the Energie tab (today's totals from the history, its settings, the web editor).
+persons with the map, the Energie tab (today's totals from the history, its settings, the web editor), and
+the entity list cache.

@@ -30,7 +30,8 @@ Screen {
 	onShown: {
 		app.allEntitiesLoaded.connect(rebuild);
 		app.selectionChanged.connect(updateMarks);
-		if (app.allEntities.length === 0) app.loadAllEntities();
+		// the list comes from the cache; older than an hour: fetched again in the background
+		if (app.allEntities.length === 0 || new Date().getTime() - app.allVersion > 3600 * 1000) app.loadAllEntities();
 		rebuild();
 	}
 	onHidden: {
@@ -55,29 +56,39 @@ Screen {
 	function rebuild() {
 		var list = [];
 		for (var i = 0; i < app.allEntities.length; i++) if (matches(app.allEntities[i])) list.push(app.allEntities[i]);
-		list.sort(function(a, b) {
-			var ra = app.areaRank(a.area), rb = app.areaRank(b.area);
-			if (ra !== rb) return ra - rb;
-			var na = (a.name || a.id).toLowerCase(), nb = (b.name || b.id).toLowerCase();
-			return na < nb ? -1 : (na > nb ? 1 : 0);
+		// sort keys made once, not in every comparison
+		var keyed = [];
+		for (var n = 0; n < list.length; n++) keyed.push({e: list[n], rank: app.areaRank(list[n].area), name: (list[n].name || list[n].id).toLowerCase()});
+		keyed.sort(function(a, b) {
+			if (a.rank !== b.rank) return a.rank - b.rank;
+			return a.name < b.name ? -1 : (a.name > b.name ? 1 : 0);
 		});
-		entityModel.clear();
-		for (var j = 0; j < list.length; j++) {
-			var e = list[j];
+		var rows = [];
+		for (var j = 0; j < keyed.length; j++) {
+			var e = keyed[j].e;
 			var k = app.indexOf(e.id);
-			entityModel.append({entityId: e.id, haName: e.name || e.id, area: e.area || "Geen ruimte",
+			rows.push({entityId: e.id, haName: e.name || e.id, area: e.area || "Geen ruimte",
 				selected: k >= 0, fav: k >= 0 && app.entities[k].fav, ownName: k >= 0 ? app.entities[k].name : ""});
+		}
+		entityModel.clear();
+		// all rows in one go: a hundred times faster than one by one (an older Qt without it: one by one)
+		try { entityModel.append(rows); } catch (err) {}
+		if (entityModel.count !== rows.length) {
+			entityModel.clear();
+			for (var r = 0; r < rows.length; r++) entityModel.append(rows[r]);
 		}
 		listView.contentY = 0;
 	}
 
+	// after a change: only the rows that differ (a model update per row is slow on the Toon)
 	function updateMarks() {
 		for (var i = 0; i < entityModel.count; i++) {
-			var id = entityModel.get(i).entityId;
-			var k = app.indexOf(id);
-			entityModel.setProperty(i, "selected", k >= 0);
-			entityModel.setProperty(i, "fav", k >= 0 && app.entities[k].fav);
-			entityModel.setProperty(i, "ownName", k >= 0 ? app.entities[k].name : "");
+			var row = entityModel.get(i);
+			var k = app.indexOf(row.entityId);
+			var selected = k >= 0, fav = k >= 0 && app.entities[k].fav, ownName = k >= 0 ? app.entities[k].name : "";
+			if (row.selected !== selected) entityModel.setProperty(i, "selected", selected);
+			if (row.fav !== fav) entityModel.setProperty(i, "fav", fav);
+			if (row.ownName !== ownName) entityModel.setProperty(i, "ownName", ownName);
 		}
 	}
 
@@ -109,7 +120,7 @@ Screen {
 		StandardButton {
 			text: search === "" ? "Zoek…" : "Zoek: " + search
 			primary: search !== ""
-			onClicked: qkeyboard.open("Zoek op naam of entity id", search, function(text) { search = text.trim(); rebuild(); })
+			onClicked: app.openKeyboard("Zoek op naam of entity id", search, function(text) { search = text.trim(); rebuild(); }, "Zoek")
 		}
 		StandardButton {
 			text: areaFilter === "" ? "Alle ruimtes" : areaFilter
