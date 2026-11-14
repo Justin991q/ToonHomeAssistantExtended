@@ -1,4 +1,5 @@
 1.2.0
+- Binary sensors (motion, a door contact) light up while on; the toggle icon shows off (knob left) and on (right)
 - Energie: yesterday up to this time (and yesterday's hours behind today's), today's costs with price entities
   (worked out per hour), and a Stroomprijs panel with today's price per hour (dynamic contracts) and the cheapest hour
 - Energie: the history is fetched in full once, then only the readings since the last time (lighter for the Toon)

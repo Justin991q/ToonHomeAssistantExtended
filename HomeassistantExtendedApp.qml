@@ -442,6 +442,7 @@ App {
 			return a ? ["heating", "cooling", "drying", "fan"].indexOf(a) >= 0 : (s !== "off" && s !== "" && s !== "unavailable");
 		}
 		if (d === "humidifier" || d === "fan") return s === "on";
+		if (d === "binary_sensor") return s === "on";          // motion, a door open, …
 		if (d === "media_player") return s === "playing";
 		return actionOf(id) === "toggle" && isOn(id);
 	}
