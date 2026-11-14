@@ -1,5 +1,6 @@
 import QtQuick 2.1
 import qb.components 1.0
+import BasicUIControls 1.0
 
 // the Home Assistant address and token, a connection test, and the way to the entity chooser and web editor
 Screen {
@@ -203,7 +204,9 @@ Screen {
 		font.family: qfont.semiBold.name
 		font.pixelSize: isNxt ? 18 : 15
 		color: colors.singleLabelLeftText
-		text: "Webeditor (makkelijker bij veel entiteiten):"
+		text: "Webeditor: makkelijker bij veel entiteiten. Scan de code met je telefoon of typ het adres:"
+		width: introText.width - qrFrame.width - 24
+		wrapMode: Text.WordWrap
 	}
 	Text {
 		id: webUrl
@@ -213,22 +216,48 @@ Screen {
 			left: introText.left
 		}
 		font.family: qfont.bold.name
+		width: webTitle.width
+		elide: Text.ElideRight
 		font.pixelSize: isNxt ? 22 : 18
-		color: "#4a90e2"
-		text: app.webEditorUrl()
+		color: app.webEditorKnown() ? "#4a90e2" : "#808080"
+		text: app.webEditorKnown() ? app.webEditorUrl() : "IP-adres van de Toon nog niet bekend"
 	}
 	Text {
 		anchors {
 			top: webUrl.bottom
 			topMargin: 6
 			left: introText.left
-			right: introText.right
+			right: qrFrame.left
+			rightMargin: 24
 		}
 		wrapMode: Text.WordWrap
 		font.family: qfont.regular.name
 		font.pixelSize: isNxt ? 14 : 12
 		color: "#808080"
-		text: "De webeditor gebruikt poort " + app.webPort + ". Geen verbinding vanuit de webeditor? Druk op \"Flush firewall rules\" (Instellingen > TSC), een herstart is niet nodig."
+		text: (app.webEditorKnown() ? "" : "Het adres staat ook onder Instellingen > Internet. ")
+			+ "De webeditor gebruikt poort " + app.webPort + ". Geen verbinding vanuit de webeditor? Druk op \"Flush firewall rules\" (Instellingen > TSC), een herstart is niet nodig."
 			+ (app.appVersion ? "   Versie " + app.appVersion : "")
+	}
+
+	// the web editor's address as a QR code: scan it with a phone, no typing
+	Rectangle {
+		id: qrFrame
+		visible: app.webEditorKnown()
+		width: visible ? qr.width + 16 : 0
+		height: qr.height + 16
+		radius: 6
+		color: "#ffffff"
+		anchors {
+			top: webTitle.top
+			right: introText.right
+		}
+		QrCode {
+			id: qr
+			anchors.centerIn: parent
+			height: Math.round(120 * verticalScaling)
+			width: height * designElements.pixelAspectRatio
+			content: app.webEditorUrl()
+			color: "#000000"
+		}
 	}
 }

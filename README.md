@@ -54,6 +54,8 @@ the order of the areas. A web editor makes setup easy when there are many entiti
 
 - **A setup screen on the Toon**: address, token, connection test, the systray option, and an entity
   chooser with search, area and type filters, plus rename (pencil) and favourite (star).
+  It also shows the web editor's full address with the Toon's IP address, and a **QR code** of it:
+  scan it with your phone and paste the token there instead of typing it on the Toon.
 
 | Settings | Choosing entities on the Toon |
 |---|---|
@@ -74,10 +76,17 @@ Use the IP address of Home Assistant: the Toon usually can't resolve `homeassist
 
 ## Web editor
 
+The easiest way in: scan the QR code on the Toon's settings screen (*Instellingen* in the app).
+The Toon's IP address comes from `/proc/net/fib_trie` (else from a connection the Toon has open).
+
 The page is published to the Toon's own web server (`/qmf/www/homeassistant.html`). It talks to the
 app over a WebSocket on **port 8137**. The app adds that port to `/etc/default/iptables.conf`. **On a
 real Toon the firewall doesn't pick up the port by itself.** If the web editor can't connect to the Toon,
 press **Flush firewall rules** (Instellingen > TSC); a reboot isn't needed. A reboot works too.
+
+On a phone the page has three tabs at the top: **Gekozen** (with the number chosen), **Toevoegen** and
+**Verbinding**. It opens on the one you need: Verbinding when Home Assistant isn't set up yet, Toevoegen
+when nothing is chosen, otherwise Gekozen. On a computer you see everything side by side.
 
 In the web editor you can:
 - set the address and token (the token is write-only: the page never gets it back from the Toon);

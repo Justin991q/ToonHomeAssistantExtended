@@ -81,6 +81,7 @@ App {
 	FileIO { id: pageTarget; source: "file:///qmf/www/" + webPage }
 	FileIO { id: iptablesFile; source: "file:///etc/default/iptables.conf" }
 	FileIO { id: tcpFile; source: "file:///proc/net/tcp" }
+	FileIO { id: fibFile; source: "file:///proc/net/fib_trie" }
 
 	function init() {
 		registry.registerWidget("tile", tileUrl, this, null, {thumbLabel: qsTr("Home-Assistant"), thumbIcon: thumbnailIcon, thumbCategory: "general", thumbWeight: 30, baseTileWeight: 10, thumbIconVAlignment: "center"});
@@ -441,6 +442,7 @@ App {
 			connected = true;
 			lastError = "";
 			var now = new Date();
+			if (!toonAddress) toonAddress = findToonAddress();   // the Toon may have had no address or connection at the start
 			lastUpdate = ("0" + now.getHours()).slice(-2) + ":" + ("0" + now.getMinutes()).slice(-2) + ":" + ("0" + now.getSeconds()).slice(-2);
 			statesUpdated();
 		});
@@ -752,8 +754,17 @@ App {
 		} catch (e) {}
 	}
 
-	// the Toon's own IP address, from a listening socket in /proc/net/tcp
+	// the Toon's own IP address: from the kernel's address list, else from a connection it has open
 	function findToonAddress() {
+		// /proc/net/fib_trie: "|-- 192.168.1.23" followed by "/32 host LOCAL"
+		try {
+			var fib = fibFile.read().split("\n");
+			for (var f = 1; f < fib.length; f++) {
+				if (fib[f].indexOf("/32 host LOCAL") < 0) continue;
+				var m = fib[f - 1].match(/(\d+)\.(\d+)\.(\d+)\.(\d+)\s*$/);
+				if (m && m[1] !== "127" && m[1] !== "0") return m[1] + "." + m[2] + "." + m[3] + "." + m[4];
+			}
+		} catch (e1) {}
 		try {
 			var lines = tcpFile.read().split("\n");
 			for (var i = 1; i < lines.length; i++) {
@@ -769,6 +780,8 @@ App {
 		return "";
 	}
 
+	function webEditorKnown() { return toonAddress !== ""; }
+
 	function webEditorUrl() {
 		if (toonAddress) return "http://" + toonAddress + "/" + webPage;
 		return "http://<ip-van-toon>/" + webPage;
@@ -777,6 +790,7 @@ App {
 	function stateMessage() {
 		return JSON.stringify({
 			type: "state",
+			app: "homeassistantExtended",          // the web editor ignores other apps on the same port
 			version: appVersion,
 			url: haUrl,
 			hasToken: haToken !== "",

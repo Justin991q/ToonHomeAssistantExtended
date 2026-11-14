@@ -16,11 +16,14 @@
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
-header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: var(--card); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
-header h1 { font-size: 18px; margin: 0; flex: 1; }
+header { display: flex; align-items: center; gap: 12px; padding: 12px 20px; background: var(--card); border-bottom: 1px solid var(--line); }
+header .titles { flex: 1; min-width: 0; }
+header h1 { font-size: 18px; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+header .sub { display: flex; align-items: center; gap: 6px; }
 .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--err); display: inline-block; }
 .dot.on { background: var(--ok); }
-#status { color: var(--muted); font-size: 13px; }
+#status { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#tabs { display: none; }
 main { max-width: 1280px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
 .card h2 { font-size: 16px; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
@@ -45,6 +48,9 @@ button:disabled { opacity: .45; cursor: default; }
 .ent.sel { background: var(--accent-soft); }
 .ent.sub { padding-left: 18px; }
 .area .amove { display: flex; gap: 4px; }
+.acts, .moves { display: flex; gap: 4px; flex: none; }
+.chip { font-size: 13px; display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 5px 10px; cursor: pointer; }
+.chip:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
 .area .amove .icon { padding: 2px 7px; font-size: 11px; }
 .ent .info { flex: 1; min-width: 0; }
 .ent .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -56,23 +62,75 @@ button:disabled { opacity: .45; cursor: default; }
 .star.on { color: var(--star); }
 .empty { color: var(--muted); padding: 24px 4px; text-align: center; }
 #savebar { position: sticky; bottom: 0; grid-column: 1 / -1; display: none; justify-content: flex-end; align-items: center; gap: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 16px; box-shadow: 0 -2px 12px rgba(0,0,0,.08); }
+#savebar .msg { margin-right: auto; }
 #savebar.show { display: flex; }
 .hint { max-width: 1280px; margin: 16px auto 0; padding: 12px 16px; border-radius: 10px; background: #fff4d6; color: #5a4300; border: 1px solid #f0d58a; }
 @media (prefers-color-scheme: dark) { .hint { background: #3a3014; color: #f3e2b0; border-color: #6b5a24; } }
+/* ---- phones: one part at a time (tabs), the page scrolls, everything big enough for a thumb ---- */
 @media (max-width: 860px) {
-	main { grid-template-columns: 1fr; padding: 16px; }
-	.list { max-height: 60vh; }
+	body { font-size: 16px; }
+	header { padding: 10px 16px; gap: 10px; }
+	header h1 { font-size: 16px; }
+	header h1 small { display: none; }
+	#tabs { display: flex; position: sticky; top: 0; z-index: 6; background: var(--card); border-bottom: 1px solid var(--line); }
+	#tabs button { flex: 1; border: none; border-radius: 0; background: none; padding: 12px 4px; min-height: 48px; font-size: 15px; color: var(--muted); border-bottom: 3px solid transparent; }
+	#tabs button.on { color: var(--text); font-weight: 600; border-bottom-color: var(--accent); }
+	#tabs .badge { display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 4px; border-radius: 10px; background: var(--accent); color: #fff; font-size: 12px; line-height: 20px; }
+	main { grid-template-columns: 1fr; padding: 12px 12px 96px; gap: 12px; }
+	main > section { display: none; }
+	body[data-view="conn"] #connection, body[data-view="add"] #addCard, body[data-view="chosen"] #chosenCard { display: block; }
+	.card { padding: 14px 12px; border-radius: 12px; }
+	.card h2 { font-size: 17px; }
+	input[type=text], input[type=password], input[type=search], select { font-size: 16px; padding: 10px 12px; min-height: 44px; }   /* 16px: no zooming in on iOS */
+	button { min-height: 44px; padding: 10px 14px; }
+	button.icon { min-width: 44px; min-height: 44px; padding: 0; font-size: 15px; }
+	label.f { min-width: 100%; }
+	#connection .row button { flex: 1; }
+	.filters #search { flex: 1 1 100% !important; }
+	.filters select { flex: 1 1 40%; }
+	.list { max-height: none; min-height: 0; overflow: visible; }
+	.area { top: 49px; padding: 12px 4px 6px; align-items: center; }
+	.area small { padding: 8px 4px; font-size: 14px; }
+	.area .amove .icon { min-width: 40px; min-height: 36px; font-size: 13px; }
+	.ent { padding: 10px 4px; gap: 10px; min-height: 56px; }
+	.ent.sub { padding-left: 4px; }
+	.ent input[type=checkbox] { width: 22px; height: 22px; }
 	.ent .state { display: none; }
+	.star { font-size: 26px; min-width: 40px; min-height: 44px; }
+	/* a chosen entity on two lines: star | name (full width)  and  star | entity id | up down x */
+	.ent.sub { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; grid-template-areas: "star name name" "star id acts"; column-gap: 8px; row-gap: 4px; align-items: center; }
+	.ent.sub .star { grid-area: star; }
+	.ent.sub .info { display: contents; }
+	.ent.sub input.rename { grid-area: name; }
+	.ent.sub .id { grid-area: id; }
+	.ent.sub .acts { grid-area: acts; }
+	.ent.sub .acts .icon { min-height: 36px; min-width: 44px; }
+	/* the sort buttons: small, on one row that scrolls sideways */
+	.sorts { flex-wrap: nowrap; overflow-x: auto; gap: 6px; padding-bottom: 2px; }
+	.sorts > span { display: none; }
+	.sorts button { flex: none; min-height: 36px; padding: 6px 12px; font-size: 14px; border-radius: 999px; white-space: nowrap; }
+	#savebar { position: fixed; left: 0; right: 0; bottom: 0; border-radius: 0; border-width: 1px 0 0; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); z-index: 7; }
+	#savebar .msg { font-size: 13px; white-space: nowrap; }
+	#savebar button { white-space: nowrap; }
+	#savebar #saveBtn { flex: 1; }
+	.wide { display: none; }
+	.hint { margin: 12px; }
 }
 </style>
 </head>
 <body>
 <header>
 	<img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNDAgMjQwIiB3aWR0aD0iMjQwIiBoZWlnaHQ9IjI0MCI+CiAgPCEtLSBIb21lIEFzc2lzdGFudCBtYXJrOiBhIGhvdXNlIHdpdGggdGhlIG5vZGUgdHJlZSAtLT4KICA8cGF0aCBkPSJNMTIwIDE4IEwyMiAxMDggUTE2IDExNCAxNiAxMjIgVjIxMiBRMTYgMjI0IDI4IDIyNCBIMjEyIFEyMjQgMjI0IDIyNCAyMTIgVjEyMiBRMjI0IDExNCAyMTggMTA4IFoiIGZpbGw9IiMxOEJDRjIiLz4KICA8ZyBmaWxsPSJub25lIiBzdHJva2U9IiNmZmZmZmYiIHN0cm9rZS13aWR0aD0iMTEiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+CiAgICA8bGluZSB4MT0iMTIwIiB5MT0iMTA0IiB4Mj0iMTIwIiB5Mj0iMjI0Ii8+CiAgICA8cG9seWxpbmUgcG9pbnRzPSI4NiwxMzggODYsMTU0IDEyMCwxODYiLz4KICAgIDxwb2x5bGluZSBwb2ludHM9IjE1NCwxNTIgMTU0LDE3MCAxMjAsMjA0Ii8+CiAgICA8Y2lyY2xlIGN4PSIxMjAiIGN5PSI4OCIgcj0iMTUiLz4KICAgIDxjaXJjbGUgY3g9Ijg2IiBjeT0iMTIyIiByPSIxNSIvPgogICAgPGNpcmNsZSBjeD0iMTU0IiBjeT0iMTM2IiByPSIxNSIvPgogIDwvZz4KPC9zdmc+Cg==" alt="" width="28" height="28">
-	<span class="dot" id="dot"></span>
-	<h1>Home-Assistant Extended <small style="font-weight:normal;color:var(--muted)">op Toon</small></h1>
-	<span id="status">verbinden met Toon…</span>
+	<div class="titles">
+		<h1>Home-Assistant Extended <small style="font-weight:normal;color:var(--muted)">op Toon</small></h1>
+		<div class="sub"><span class="dot" id="dot"></span><span id="status">verbinden met Toon…</span></div>
+	</div>
 </header>
+<nav id="tabs">
+	<button data-view="chosen">Gekozen<span class="badge" id="tabChosen">0</span></button>
+	<button data-view="add">Toevoegen</button>
+	<button data-view="conn">Verbinding</button>
+</nav>
 <div id="fwHint" class="hint" hidden>Geen verbinding met de app op de Toon (WebSocket-poort <span id="fwPort"></span>). Druk op de Toon op <b>Instellingen &gt; TSC &gt; Flush firewall rules</b>, dan maakt deze pagina vanzelf verbinding. Een herstart van de Toon is niet nodig.</div>
 
 <main>
@@ -96,21 +154,21 @@ button:disabled { opacity: .45; cursor: default; }
 		</div>
 	</section>
 
-	<section class="card">
+	<section class="card" id="addCard">
 		<h2>Alle entiteiten <span class="count" id="allCount"></span>
 			<button class="icon" id="refreshBtn" title="Opnieuw ophalen uit Home Assistant" style="margin-left:auto">⟳</button></h2>
-		<div class="row">
+		<div class="row filters">
 			<input type="search" id="search" placeholder="Zoek op naam of entity id" style="flex:2;min-width:160px">
 			<select id="areaSel"></select>
 			<select id="domainSel"></select>
-			<label style="font-size:13px;display:flex;gap:4px;align-items:center"><input type="checkbox" id="onlySel"> alleen gekozen</label>
+			<label class="chip"><input type="checkbox" id="onlySel"> alleen gekozen</label>
 		</div>
 		<div class="list" id="allList"></div>
 	</section>
 
-	<section class="card">
+	<section class="card" id="chosenCard">
 		<h2>Gekozen <span class="count" id="selCount"></span></h2>
-		<div class="row">
+		<div class="row sorts">
 			<span style="font-size:13px;color:var(--muted)">Volgorde van de kaarten per ruimte:</span>
 			<button id="sortName">Sorteer op naam</button>
 			<button id="areaReset" title="De ruimtes weer in de volgorde van Home Assistant">Ruimtes zoals in Home Assistant</button>
@@ -120,9 +178,9 @@ button:disabled { opacity: .45; cursor: default; }
 	</section>
 
 	<div id="savebar">
-		<span class="msg">Niet opgeslagen wijzigingen</span>
-		<button id="undoBtn">Ongedaan maken</button>
-		<button id="saveBtn" class="primary">Opslaan op Toon</button>
+		<span class="msg">Niet opgeslagen</span>
+		<button id="undoBtn">Ongedaan</button>
+		<button id="saveBtn" class="primary">Opslaan<span class="wide"> op Toon</span></button>
 	</div>
 </main>
 
@@ -139,7 +197,17 @@ let chosen = [];           // working copy: [{id, name, fav}]
 let dirty = false;
 let pendingConnMsg = "";
 let failures = 0;
-let areaOrder = [];       // working copy of your area order          // failed connection attempts in a row
+let areaOrder = [];       // working copy of your area order
+let view = null;          // phones: the part shown (chosen, add, conn)
+
+function setView(v) {
+	view = v;
+	document.body.dataset.view = v;
+	document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.view === v));
+	window.scrollTo(0, 0);
+}
+document.body.dataset.view = "chosen";
+$("tabs").addEventListener("click", (ev) => { const b = ev.target.closest("button"); if (b) setView(b.dataset.view); });          // failed connection attempts in a row
 
 // ---- connection with the Toon ----
 function connect() {
@@ -153,6 +221,7 @@ function connect() {
 	ws.onerror = () => {};
 	ws.onmessage = (ev) => {
 		let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+		if (m.type === "state" && m.app !== "homeassistantExtended") { setStatus("poort " + WS_PORT + " is van een andere app op de Toon", false); return; }
 		if (m.type === "state") onState(m);
 		else if (m.type === "test") setConnMsg(m.message, m.ok);
 		else if (m.type === "saved") { dirty = false; updateSavebar(); setStatus("opgeslagen op Toon"); }
@@ -180,6 +249,7 @@ function onState(m) {
 	if (m.loading) $("allCount").textContent = "(ophalen…)";
 	if (!dirty) $("systray").checked = !!m.systray;
 	if (!dirty) areaOrder = (m.areaOrder || []).slice();
+	if (view === null) setView(!m.url || !m.hasToken ? "conn" : (m.entities.length ? "chosen" : "add"));   // the first message: where to start
 	if (!dirty) chosen = m.entities.map(e => ({id: e.id, name: e.name || "", fav: !!e.fav}));
 	fillFilters();
 	render();
@@ -247,6 +317,7 @@ function renderChosen() {
 	if (!server) return;
 	const all = byId();
 	$("selCount").textContent = `(${chosen.length}, ${chosen.filter(c => c.fav).length} favoriet)`;
+	$("tabChosen").textContent = chosen.length;
 	const groups = chosenGroups(), named = groups.filter(g => g.area);
 	$("selList").innerHTML = groups.map(g => {
 		const k = named.indexOf(g);
@@ -262,12 +333,12 @@ function renderChosen() {
 				<input type="text" class="rename" data-name="${i}" value="${esc(c.name)}" placeholder="${esc(e.name || c.id)}" style="width:100%">
 				<div class="id">${esc(c.id)}</div>
 			</div>
-			<button class="icon" data-move="${i}:-1" ${n === 0 ? "disabled" : ""} title="Omhoog binnen ${esc(g.area || "Overig")}">▲</button>
-			<button class="icon" data-move="${i}:1" ${n === g.rows.length - 1 ? "disabled" : ""} title="Omlaag binnen ${esc(g.area || "Overig")}">▼</button>
-			<button class="icon" data-remove="${i}" title="Verwijderen">✕</button>
+			<span class="acts"><span class="moves"><button class="icon" data-move="${i}:-1" ${n === 0 ? "disabled" : ""} title="Omhoog binnen ${esc(g.area || "Overig")}">▲</button>
+			<button class="icon" data-move="${i}:1" ${n === g.rows.length - 1 ? "disabled" : ""} title="Omlaag binnen ${esc(g.area || "Overig")}">▼</button></span>
+			<button class="icon rm" data-remove="${i}" title="Verwijderen">✕</button></span>
 		</div>`;
 		}).join("");
-	}).join("") || '<div class="empty">Vink links entiteiten aan om ze op de Toon te tonen.</div>';
+	}).join("") || '<div class="empty">Nog niets gekozen.<br><br><button class="primary" data-goto="add">Entiteiten toevoegen</button></div>';
 }
 
 // ---- events ----
@@ -288,6 +359,7 @@ $("allList").addEventListener("click", (ev) => {
 $("selList").addEventListener("click", (ev) => {
 	const t = ev.target.closest("button");
 	if (!t) return;
+	if (t.dataset.goto) { setView(t.dataset.goto); return; }
 	if (t.dataset.amove) {
 		// a whole area up or down: the order of the tabs on the Toon
 		const [k, d] = t.dataset.amove.split(":").map(Number);

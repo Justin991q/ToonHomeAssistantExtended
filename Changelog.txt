@@ -15,3 +15,6 @@
 - Set the order of the areas in the web editor; "Gekozen" is grouped per area
 - Screenshots in the README
 - After a command the state is fetched after 1 s and again after 3 s, so lamps that fade show the right state
+- Settings screen: QR code and the full web editor address with the Toon's IP address
+- Web editor works well on phones: tabs (Gekozen, Toevoegen, Verbinding), big touch targets, two-line rows, compact save bar
+- Web editor ignores another app that uses the same WebSocket port
