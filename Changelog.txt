@@ -2,6 +2,8 @@
 - Live updates over Home Assistant's WebSocket API (subscribe_entities): changes show at once; polling only when
   the connection is down (then every pollSeconds) or every 5 minutes for names and areas
 - New tile: the first four favourites as mini cards in the main screen's style
+- Live updates only redraw when something the app shows changed (not a speaker's position every second), so a tap
+  isn't lost; an older poll's answer no longer replaces newer states; the speaker's source buttons stay put
 - The original Home Assistant logo (tile, tile chooser, systray, screens, web editor)
 - Fans: a tap on the card (or the tile) opens the fan screen instead of switching the fan
 - Faster with many entities (hundreds): the list of all entities is cached on the Toon (fetched again after

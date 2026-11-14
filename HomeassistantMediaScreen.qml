@@ -28,6 +28,7 @@ Screen {
 		var s = app.haStates[entityId];
 		playState = s ? s.state : "";
 		off = app.mediaIsOff(entityId);
+		sourceBar.refresh();
 		var v = app.attr(entityId, "volume_level");
 		if (!volumeSlider.dragging && typeof v === "number") volumeSlider.value = v;
 	}
@@ -176,7 +177,16 @@ Screen {
 	// ---- source: a row of buttons that scrolls sideways ----
 	Item {
 		id: sourceBar
-		property variant sources: rev >= 0 && app.mediaSupports(entityId, "source") ? (app.attr(entityId, "source_list") || []) : []
+		property variant sources: []
+		property string sourcesKey: ""
+		// rebuilt only when the list changes: a redraw would drop a tap that is going on
+		function refresh() {
+			var list = app.mediaSupports(entityId, "source") ? (app.attr(entityId, "source_list") || []) : [];
+			var key = JSON.stringify(list);
+			if (key === sourcesKey) return;
+			sourcesKey = key;
+			sources = list;
+		}
 		visible: sources.length > 0 && !off
 		height: isNxt ? 48 : 40
 		anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: isNxt ? 50 : 36; rightMargin: isNxt ? 50 : 36; bottomMargin: isNxt ? 30 : 20 }

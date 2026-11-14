@@ -237,9 +237,9 @@ App {
 		liveFailed = false;
 		liveStop();
 		if (isConfigured()) {
+			liveStart();
 			pollStates();
 			loadAllEntities();
-			liveStart();
 		}
 		broadcastState();
 	}
@@ -597,6 +597,9 @@ App {
 		return out;
 	}
 
+	property int pollSeq: 0
+	property int pollApplied: 0
+
 	function pollStates() {
 		var list = pollIds();
 		if (!isConfigured() || list.length === 0) return;
@@ -612,19 +615,35 @@ App {
 			+ "state_attr(i, 'min_color_temp_kelvin'), state_attr(i, 'max_color_temp_kelvin'), state_attr(i, 'color_mode')] if i.startswith('light.') else none), "
 			+ "ns.v, (as_timestamp(states[i].last_changed) if i.split('.')[0] in ['person', 'device_tracker'] and states[i] else none)] | tojson }}"
 			+ "{%- if not loop.last %},{% endif -%}{%- endfor -%}]";
+		var seq = ++pollSeq;
 		template(tpl, function(list, err) {
+			// an answer to an older poll that comes in after a newer one (another selection by then): not used
+			if (seq < pollApplied) return;
+			pollApplied = seq;
 			if (list === null) {
+				if (liveConnected) return;            // live updates carry on
 				connected = false;
 				lastError = err;
 				statesUpdated();
 				return;
 			}
+			// merged into what is there (what live updates brought in since stays), for the ids polled now
+			var keep = {}, wanted = pollIds();
+			for (var w0 = 0; w0 < wanted.length; w0++) keep[wanted[w0]] = true;
 			var map = {};
+			for (var id0 in haStates) if (keep[id0]) map[id0] = haStates[id0];
 			for (var j = 0; j < list.length; j++) {
 				var r = list[j];
-				map[r[0]] = {state: r[1], unit: r[2] || "", name: r[3] || "", area: r[4] || "",
+				if (!keep[r[0]]) continue;
+				var polled = {state: r[1], unit: r[2] || "", name: r[3] || "", area: r[4] || "",
 					codeFormat: r[5] || "", codeArmRequired: r[6] !== false, features: r[7] || 0, light: lightInfo(r[8]),
 					attrs: extAttrs(r[0], r[9]), changed: r[10] || 0};
+				if (liveConnected && liveRaw[r[0]] && map[r[0]]) {
+					// live is newer than a poll's answer: only the area (live doesn't send it)
+					map[r[0]] = copyState(map[r[0]], {area: polled.area});
+					continue;
+				}
+				map[r[0]] = polled;
 				applyHold(map, r[0]);
 			}
 			var hadWeather = false;
@@ -684,6 +703,7 @@ App {
 	}
 
 	function liveSend(obj) {
+		if (haSocket.status !== WebSocket.Open) return;
 		try { haSocket.sendTextMessage(JSON.stringify(obj)); } catch (e) {}
 	}
 
@@ -762,16 +782,20 @@ App {
 		liveRaw = raw;
 		if (changed.length === 0) return;
 		var map = haStates;
-		var newWeather = false;
+		var newWeather = false, any = false;
 		for (var n = 0; n < changed.length; n++) {
 			id = changed[n];
+			var before = map[id] ? JSON.stringify(map[id]) : "";
 			map[id] = liveState(id, raw[id], map[id]);
 			applyHold(map, id);
+			if (JSON.stringify(map[id]) !== before) any = true;
 			if (domainOf(id) === "weather" && !forecasts[id]) newWeather = true;
 		}
-		haStates = map;
+		var wasConnected = connected;
 		connected = true;
 		lastError = "";
+		if (!any && wasConnected) return;            // nothing the cards show: no redraw (and no button rebuilt under a finger)
+		haStates = map;
 		statesUpdated();
 		if (newWeather) loadForecasts();
 	}
