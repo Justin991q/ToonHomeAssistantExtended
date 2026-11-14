@@ -1,4 +1,4 @@
-1.1.2
+1.2.0
 - Fans: a tap on the card (or the tile) opens the fan screen instead of switching the fan
 - Faster with many entities (hundreds): the list of all entities is cached on the Toon (fetched again after
   6 hours, or when you ask) and looked up by index; the web editor gets that list apart from the state and
@@ -7,6 +7,7 @@
 - Cache wissen: on the settings screen and in the web editor, forgets the cached entity list and fetches it again
 - Searching in the entity chooser: the keyboard's button says "Zoek"
 - Overig can be moved like the other areas (web editor)
+- Web editor: drag and drop (⠿) in "Gekozen": cards within their area, and whole areas; works with a mouse and on a phone
 - The tab to open on: the last one, Favorieten, Energie, an area or Overig (settings screen, web editor)
 
 1.1.1

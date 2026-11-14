@@ -143,8 +143,8 @@ In the web editor you can:
 - set the address and token (the token is write-only: the page never gets it back from the Toon);
 - tick entities, or tick all entities of an area at once; filter by search, area and type;
 - see your chosen entities grouped per area; rename them, mark favourites and set their order within the
-  area (▲▼, or sort by name or favourites first): that's the order of the cards on the Toon;
-- set the **order of the areas** (▲▼ next to an area's name, *Overig* too): that's the order of the tabs on
+  area (drag them by ⠿, or ▲▼, or sort by name or favourites first): that's the order of the cards on the Toon;
+- set the **order of the areas** (drag an area by the ⠿ before its name, or ▲▼; *Overig* too): that's the order of the tabs on
   the Toon. *Ruimtes zoals in Home Assistant* goes back to Home Assistant's order (Overig last);
 - choose the tab the Toon **opens on** (*Op de Toon openen op*): the last one you used, Favorieten, Energie,
   an area or Overig. On the Toon: *Openen op* on the settings screen (each tap the next choice);

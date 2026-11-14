@@ -55,7 +55,16 @@ button:disabled { opacity: .45; cursor: default; }
 .area small { color: var(--muted); font-weight: normal; cursor: pointer; }
 .ent { display: flex; align-items: center; gap: 10px; padding: 6px 4px; border-bottom: 1px solid var(--line); }
 .ent.sel { background: var(--accent-soft); }
-.ent.sub { padding-left: 18px; }
+.ent.sub { padding-left: 6px; }
+/* drag and drop: the grip, the row being dragged, where it will land */
+.grip { flex: none; cursor: grab; color: var(--muted); font-size: 18px; line-height: 1; padding: 6px 4px; user-select: none; touch-action: none; }
+.grip:hover { color: var(--text); }
+.area .grip { font-size: 16px; padding: 2px 6px 2px 0; }
+.dragging { opacity: .45; }
+body.dragging-on, body.dragging-on * { cursor: grabbing !important; user-select: none; }
+.drop-before { box-shadow: inset 0 3px 0 var(--accent); }
+.drop-after { box-shadow: inset 0 -3px 0 var(--accent); }
+.area > span { display: flex; align-items: center; gap: 2px; }
 .area .amove { display: flex; gap: 4px; }
 .acts, .moves { display: flex; gap: 4px; flex: none; }
 .chip { font-size: 13px; display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 5px 10px; cursor: pointer; }
@@ -109,7 +118,9 @@ button:disabled { opacity: .45; cursor: default; }
 	.ent .state { display: none; }
 	.star { font-size: 26px; min-width: 40px; min-height: 44px; }
 	/* a chosen entity on two lines: star | name (full width)  and  star | entity id | up down x */
-	.ent.sub { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; grid-template-areas: "star name name" "star id acts"; column-gap: 8px; row-gap: 4px; align-items: center; }
+	.ent.sub { display: grid; grid-template-columns: 28px 40px minmax(0, 1fr) auto; grid-template-areas: "grip star name name" "grip star id acts"; column-gap: 6px; row-gap: 4px; align-items: center; }
+	.ent.sub .grip { grid-area: grip; font-size: 22px; padding: 10px 2px; text-align: center; }
+	.area .grip { font-size: 20px; padding: 8px 8px 8px 2px; }
 	.ent.sub .star { grid-area: star; }
 	.ent.sub .info { display: contents; }
 	.ent.sub input.rename { grid-area: name; }
@@ -409,10 +420,11 @@ function renderChosen() {
 		const moves = `<span class="amove">
 			<button class="icon" data-amove="${k}:-1" ${k === 0 ? "disabled" : ""} title="Ruimte omhoog">▲</button>
 			<button class="icon" data-amove="${k}:1" ${k === groups.length - 1 ? "disabled" : ""} title="Ruimte omlaag">▼</button></span>`;
-		return `<div class="area"><span>${esc(g.area || "Overig")} <small style="cursor:default">${g.rows.length}</small></span>${moves}</div>` +
+		return `<div class="area" data-group="${k}"><span><span class="grip" data-grip="area:${k}" title="Sleep om de ruimte te verplaatsen">⠿</span>${esc(g.area || "Overig")} <small style="cursor:default">${g.rows.length}</small></span>${moves}</div>` +
 		g.rows.map((i, n) => {
 			const c = chosen[i], e = all[c.id] || {};
-			return `<div class="ent sub" data-row="${i}">
+			return `<div class="ent sub" data-row="${i}" data-group="${k}">
+			<span class="grip" data-grip="row:${i}" title="Sleep om te verplaatsen (binnen ${esc(g.area || "Overig")})">⠿</span>
 			<button class="star${c.fav ? " on" : ""}" data-fav="${i}" title="Favoriet (op de tegel en het tabblad Favorieten)">${c.fav ? "★" : "☆"}</button>
 			<div class="info">
 				<input type="text" class="rename" data-name="${i}" value="${esc(c.name)}" placeholder="${esc(e.name || c.id)}" style="width:100%">
@@ -487,6 +499,92 @@ $("efields").addEventListener("click", (ev) => {
 	energy[key] = (energy[key] || []).filter(x => x !== id);
 	markDirty(); renderEnergy();
 });
+
+// ---- drag and drop in "Gekozen": a card within its area, or a whole area. Pointer events (mouse and touch);
+// the ▲▼ buttons stay for whoever prefers them ----
+let drag = null;     // {kind: "row" | "area", index, group, el, target, after}
+$("selList").addEventListener("pointerdown", (ev) => {
+	const grip = ev.target.closest(".grip");
+	if (!grip || ev.button > 0) return;
+	ev.preventDefault();
+	const [kind, n] = grip.dataset.grip.split(":");
+	const el = kind === "row" ? grip.closest(".ent") : grip.closest(".area");
+	drag = {kind, index: +n, group: el.dataset.group, el, target: null, after: false, x: ev.clientX, y: ev.clientY};
+	el.classList.add("dragging");
+	if (kind === "area") $("selList").querySelectorAll(`.ent[data-group="${el.dataset.group}"]`).forEach(r => r.classList.add("dragging"));
+	document.body.classList.add("dragging-on");
+	try { grip.setPointerCapture(ev.pointerId); } catch (e) {}
+	scrollLoop();
+});
+function clearDropMark() {
+	$("selList").querySelectorAll(".drop-before, .drop-after").forEach(x => x.classList.remove("drop-before", "drop-after"));
+}
+function dragOver(x, y) {
+	drag.x = x; drag.y = y;
+	const under = document.elementFromPoint(x, y);
+	clearDropMark();
+	drag.target = null;
+	if (!under) return;
+	if (drag.kind === "row") {
+		const row = under.closest(".ent.sub");
+		if (!row || row.dataset.group !== drag.group || row === drag.el) return;      // only within its own area
+		const r = row.getBoundingClientRect();
+		drag.target = +row.dataset.row;
+		drag.after = y > r.top + r.height / 2;
+		row.classList.add(drag.after ? "drop-after" : "drop-before");
+	} else {
+		// an area: over its heading or any of its rows
+		const hit = under.closest(".area, .ent.sub");
+		if (!hit || hit.dataset.group === drag.group) return;
+		const k = +hit.dataset.group;
+		const head = $("selList").querySelector(`.area[data-group="${k}"]`);
+		const rows = $("selList").querySelectorAll(`.ent[data-group="${k}"]`);
+		const last = rows.length ? rows[rows.length - 1] : head;
+		const top = head.getBoundingClientRect().top, bottom = last.getBoundingClientRect().bottom;
+		drag.target = k;
+		drag.after = y > (top + bottom) / 2;
+		(drag.after ? last : head).classList.add(drag.after ? "drop-after" : "drop-before");
+	}
+}
+$("selList").addEventListener("pointermove", (ev) => { if (drag) { ev.preventDefault(); dragOver(ev.clientX, ev.clientY); } });
+function endDrag(apply) {
+	if (!drag) return;
+	const d = drag;
+	drag = null;
+	clearDropMark();
+	document.body.classList.remove("dragging-on");
+	$("selList").querySelectorAll(".dragging").forEach(x => x.classList.remove("dragging"));
+	if (!apply || d.target === null) return;
+	if (d.kind === "row") {
+		const item = chosen.splice(d.index, 1)[0];
+		let at = d.target > d.index ? d.target - 1 : d.target;
+		chosen.splice(d.after ? at + 1 : at, 0, item);
+	} else {
+		const names = chosenGroups().map(g => g.area);
+		const moved = names.splice(d.index, 1)[0];
+		let at = d.target > d.index ? d.target - 1 : d.target;
+		names.splice(d.after ? at + 1 : at, 0, moved);
+		areaOrder = names.concat(areaOrder.filter(a => !names.includes(a)));
+	}
+	markDirty(); render();
+}
+$("selList").addEventListener("pointerup", () => endDrag(true));
+$("selList").addEventListener("pointercancel", () => endDrag(false));
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") endDrag(false); });
+// near the top or bottom edge: scroll (the list on a computer, the page on a phone)
+function scrollLoop() {
+	if (!drag) return;
+	const list = $("selList");
+	const scrolls = list.scrollHeight > list.clientHeight + 2 && getComputedStyle(list).overflowY !== "visible";
+	const box = scrolls ? list.getBoundingClientRect() : {top: 60, bottom: window.innerHeight - 70};
+	const edge = 48, y = drag.y;
+	const step = y < box.top + edge ? -Math.ceil((box.top + edge - y) / 4) : (y > box.bottom - edge ? Math.ceil((y - box.bottom + edge) / 4) : 0);
+	if (step) {
+		if (scrolls) list.scrollTop += step; else window.scrollBy(0, step);
+		dragOver(drag.x, drag.y);
+	}
+	requestAnimationFrame(scrollLoop);
+}
 
 function sortChosen(fn) { chosen.sort(fn); markDirty(); renderChosen(); }
 const nameOf = (c) => (c.name || (byId()[c.id] || {}).name || c.id).toLowerCase();
