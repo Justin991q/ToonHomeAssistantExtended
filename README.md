@@ -49,9 +49,9 @@ the order of the areas. A web editor makes setup easy when there are many entiti
   ("Naar 20,5° · verwarmt"); the card lights up while heating. A tap opens its screen: the target with
   - and + (sent a moment after your last tap), and buttons for the mode (Uit, Verwarmen, Automatisch, …)
   and the presets (Eco, Comfort, Weg, …). A thermostat with a range (heat_cool) gets a low and a high target.
-- **Fans**: a tap switches, the card shows the speed ("Aan 50%"). The settings button (or holding the
-  card) opens the fan screen: on/off, the speed (slider, and - and + in the fan's own steps), and when the
-  fan has them its presets, oscillation (Zwenken) and direction.
+- **Fans**: the card shows the speed ("Aan 50%") or the preset. A tap opens the fan screen: on/off, the
+  speed (slider, and - and + in the fan's own steps), and when the fan has them its presets, oscillation
+  (Zwenken) and direction.
 - **Humidifiers** work the same way as thermostats: the humidity now on the card; the screen has the target humidity,
   on/off and the modes.
 - **Speakers** (`media_player`) get a double card: album art, what plays, and the keys previous,

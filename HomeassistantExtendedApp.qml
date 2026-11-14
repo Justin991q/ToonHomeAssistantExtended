@@ -359,7 +359,7 @@ App {
 	function tabOnCount(key) {
 		var ids = tabEntities(key);
 		var n = 0;
-		for (var i = 0; i < ids.length; i++) if (actionOf(ids[i]) === "toggle" && isOn(ids[i])) n++;
+		for (var i = 0; i < ids.length; i++) if ((actionOf(ids[i]) === "toggle" || domainOf(ids[i]) === "fan") && isOn(ids[i])) n++;
 		return n;
 	}
 
@@ -397,7 +397,7 @@ App {
 			var a = attr(id, "hvac_action");
 			return a ? ["heating", "cooling", "drying", "fan"].indexOf(a) >= 0 : (s !== "off" && s !== "" && s !== "unavailable");
 		}
-		if (d === "humidifier") return s === "on";
+		if (d === "humidifier" || d === "fan") return s === "on";
 		if (d === "media_player") return s === "playing";
 		return actionOf(id) === "toggle" && isOn(id);
 	}
@@ -870,8 +870,8 @@ App {
 	// what a tap on the entity does: "toggle", "press", "run" or "" (read only)
 	function actionOf(id) {
 		var d = domainOf(id);
-		if (["light", "switch", "input_boolean", "fan", "automation", "siren", "cover", "lock", "vacuum", "group"].indexOf(d) >= 0) return "toggle";
-		if (["climate", "humidifier", "media_player", "camera", "person", "device_tracker"].indexOf(d) >= 0) return "open";
+		if (["light", "switch", "input_boolean", "automation", "siren", "cover", "lock", "vacuum", "group"].indexOf(d) >= 0) return "toggle";
+		if (["fan", "climate", "humidifier", "media_player", "camera", "person", "device_tracker"].indexOf(d) >= 0) return "open";
 		if (d === "button" || d === "input_button") return "press";
 		if (d === "script" || d === "scene") return "run";
 		if (d === "alarm_control_panel") return "alarm";
@@ -1137,7 +1137,7 @@ App {
 	// the screen of a thermostat, humidifier, speaker, camera or person
 	function openDetail(id) {
 		var d = domainOf(id);
-		var url = {climate: climateScreenUrl, humidifier: climateScreenUrl, media_player: mediaScreenUrl, camera: cameraScreenUrl,
+		var url = {fan: fanScreenUrl, climate: climateScreenUrl, humidifier: climateScreenUrl, media_player: mediaScreenUrl, camera: cameraScreenUrl,
 			person: personScreenUrl, device_tracker: personScreenUrl}[d];
 		if (url) stage.openFullscreen(url, {entityId: id});
 	}
