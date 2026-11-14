@@ -93,9 +93,22 @@ the order of the areas. A web editor makes setup easy when there are many entiti
   | Zonnepanelen: opgewekt (totaal) | kWh, Wh | |
   | Gas: meterstand | m³ | |
   | Water: meterstand | L, m³ | shown in litres |
+  | Stroomprijs (per kWh) | EUR/kWh, ct/kWh, EUR/MWh | fixed, or a dynamic contract's hourly price |
+  | Terugleververgoeding (per kWh) | the same | without it: the electricity price |
+  | Gasprijs, Waterprijs (per m³) | EUR/m³ | |
 
-  For a meter reading the app works out today's use itself, from Home Assistant's history since midnight
-  (every 5 minutes, plus the live reading). A meter that resets (a daily utility meter) works too.
+  For a meter reading the app works out today's use itself, from Home Assistant's history since yesterday
+  midnight: all of it once (at the start, on a new day, after changing these settings), then every 5 minutes only
+  the readings since the last time (a meter that reports every few seconds has thousands a day), plus the live
+  reading. A meter that resets (a daily utility meter) works too.
+  - **Yesterday**: under today's total "gisteren tot nu …" (yesterday up to this time of day, and the whole
+    day), and yesterday's hours as light bars behind today's.
+  - **Costs**: with a price, today's costs next to the total, worked out per hour (use × that hour's price;
+    electricity minus what went back).
+  - **Stroomprijs**: a panel with the price now, the cheapest (and dearest) hour still to come, and today's
+    price per hour, the current hour dark (a negative price below the line). The hours come from the price
+    entity's attributes when it has them (Nordpool `today` / `raw_today`, ENTSO-e `prices_today`, or `prices`),
+    else from its history. More price entities are added up (e.g. a price and a surcharge).
 
 | Energie tab | Energie settings on the Toon |
 |---|---|
@@ -238,7 +251,8 @@ can't send). For another map, put its tile address in the settings file as `"map
 | `screenshots/` | the pictures in this README (from the simulator, Toon 2) |
 
 Settings: `/mnt/data/tsc/homeassistantExtended.userSettings.json` (`url`, `token`, `entities: [{id, name, fav}]`,
-`areaOrder` (`""` is Overig), `defaultTab`, `energy: {power, usage, export, solarPower, solar, gas, water}` (lists of entity ids),
+`areaOrder` (`""` is Overig), `defaultTab`, `energy: {power, usage, export, solarPower, solar, gas, water, priceUsage,
+priceExport, priceGas, priceWater}` (lists of entity ids),
 `enableSystray`, `pollSeconds`, `webPort`, `mapTileUrl`). The cached list of all entities:
 `/mnt/data/tsc/homeassistantExtended.entities.json`.
 

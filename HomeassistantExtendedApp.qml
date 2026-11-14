@@ -187,7 +187,7 @@ App {
 		}, null, 1));
 	}
 
-	property variant energyKeys: ["power", "usage", "export", "solarPower", "solar", "gas", "water"]
+	property variant energyKeys: ["power", "usage", "export", "solarPower", "solar", "gas", "water", "priceUsage", "priceExport", "priceGas", "priceWater"]
 
 	function cleanEnergy(e) {
 		var out = {};
@@ -904,11 +904,14 @@ App {
 	// the Energie tab: today's totals from the meter readings (history since midnight)
 	// ======================================================================
 
-	property variant energyHistory: ({})      // entity id -> {hours: [24 increments], last: reading, day: date string}
+	property variant energyHistory: ({})      // entity id -> {today: [24], yesterday: [24], last, day}: increments per hour (a meter)
+	                                          // or the value in each hour (a price)
+	property variant priceForecast: ({})      // price entity id -> [24] today's prices from its attributes (dynamic contracts)
 
-	// [{key, label, units: accepted units, total: a meter reading (true) or power now (false)}]
+	// [{key, label, units: accepted units, total: a meter reading (true) or power now (false), price: a tariff}]
 	function energyFields() {
 		var power = ["W", "kW"], kwh = ["kWh", "Wh", "MWh"];
+		var perKwh = ["EUR/kWh", "€/kWh", "ct/kWh", "EUR/MWh", "€/MWh"], perM3 = ["EUR/m³", "€/m³", "EUR/m3", "€/m3"];
 		return [
 			{key: "power", label: "Stroom: verbruik nu", units: power, total: false},
 			{key: "usage", label: "Stroom: meterstand verbruik", units: kwh, total: true},
@@ -916,7 +919,11 @@ App {
 			{key: "solarPower", label: "Zonnepanelen: vermogen nu", units: power, total: false},
 			{key: "solar", label: "Zonnepanelen: opgewekt (totaal)", units: kwh, total: true},
 			{key: "gas", label: "Gas: meterstand", units: ["m³", "ft³", "CCF"], total: true},
-			{key: "water", label: "Water: meterstand", units: ["L", "m³", "gal", "ft³"], total: true}];
+			{key: "water", label: "Water: meterstand", units: ["L", "m³", "gal", "ft³"], total: true},
+			{key: "priceUsage", label: "Stroomprijs (per kWh)", units: perKwh, total: false, price: true},
+			{key: "priceExport", label: "Terugleververgoeding (per kWh)", units: perKwh, total: false, price: true},
+			{key: "priceGas", label: "Gasprijs (per m³)", units: perM3, total: false, price: true},
+			{key: "priceWater", label: "Waterprijs (per m³)", units: perM3, total: false, price: true}];
 	}
 
 	function energyIds() {
@@ -934,6 +941,7 @@ App {
 		energy = cleanEnergy(e || {});
 		saveSettings();
 		energyHistory = {};
+		energyHistUntil = 0;
 		selectionChanged();
 		pollStates();
 		loadEnergyHistory();
@@ -953,46 +961,176 @@ App {
 		return new Date(String(s || "").replace(/(\.\d{3})\d+/, "$1"));
 	}
 
-	// the readings since midnight (Home Assistant's history) -> the increments per hour
+	// the readings since yesterday midnight (Home Assistant's history) -> per hour, for today and yesterday:
+	// the increments of a meter, the value of a price
+	property double energyHistUntil: 0        // up to when the history is in (ms); the next fetch only asks for what came after
+	property string energyHistKey: ""         // for which day and entities: another day or other entities -> everything again
+
 	function loadEnergyHistory() {
 		if (!isConfigured()) return;
-		var ids = [];
-		var totals = ["usage", "export", "solar", "gas", "water"];
-		for (var i = 0; i < totals.length; i++) {
-			var list = energy[totals[i]] || [];
-			for (var j = 0; j < list.length; j++) if (ids.indexOf(list[j]) < 0) ids.push(list[j]);
+		var ids = [], priceIds = [];
+		var keys = ["usage", "export", "solar", "gas", "water", "priceUsage", "priceExport", "priceGas", "priceWater"];
+		for (var i = 0; i < keys.length; i++) {
+			var list = energy[keys[i]] || [];
+			for (var j = 0; j < list.length; j++) {
+				if (ids.indexOf(list[j]) < 0) ids.push(list[j]);
+				if (keys[i].indexOf("price") === 0 && priceIds.indexOf(list[j]) < 0) priceIds.push(list[j]);
+			}
 		}
 		if (ids.length === 0) return;
 		var now = new Date();
 		var midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+		var yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
 		var day = midnight.toDateString();
-		request("GET", "/api/history/period/" + midnight.toISOString() + "?filter_entity_id=" + ids.join(",") + "&minimal_response&no_attributes", null, function(text, err) {
+		var key = day + "|" + ids.join(",");
+		// a meter that reports every few seconds has thousands of readings a day: everything since yesterday only
+		// once (a new day, other entities), after that only what came since the last time
+		var full = key !== energyHistKey || energyHistUntil <= 0 || energyHistUntil < midnight.getTime();
+		var from = full ? yesterday : new Date(energyHistUntil);
+		// end_time: without it Home Assistant gives one day from the start
+		request("GET", "/api/history/period/" + from.toISOString() + "?end_time=" + encodeURIComponent(now.toISOString())
+			+ "&filter_entity_id=" + ids.join(",") + "&minimal_response&no_attributes", null, function(text, err) {
 			if (text === null) return;
 			var res;
 			try { res = JSON.parse(text); } catch (e) { return; }
-			var map = {};
+			var map = full ? {} : copyState(energyHistory, {});
 			for (var r = 0; r < res.length; r++) {
 				var rows = res[r];
 				if (!rows || rows.length === 0 || !rows[0].entity_id) continue;
 				var id = rows[0].entity_id;
-				var hours = [];
-				for (var h = 0; h < 24; h++) hours.push(0);
-				var last = null;
-				for (var k = 0; k < rows.length; k++) {
-					var v = parseFloat(rows[k].state);
-					if (isNaN(v)) continue;
-					var t = parseTime(rows[k].last_changed || rows[k].last_updated);
-					if (last !== null) {
-						var hour = isNaN(t.getTime()) || t < midnight ? 0 : t.getHours();
-						hours[hour] += increment(last, v);
-					}
-					last = v;
-				}
-				if (last !== null) map[id] = {hours: hours, last: last, day: day};
+				var isPrice = priceIds.indexOf(id) >= 0;
+				if (full || !map[id]) map[id] = isPrice ? priceHistory(rows, yesterday, midnight, day) : meterHistory(rows, yesterday, midnight, day);
+				else map[id] = isPrice ? priceMore(map[id], rows, midnight) : meterMore(map[id], rows, midnight);
 			}
 			energyHistory = map;
+			energyHistKey = key;
+			energyHistUntil = now.getTime();
 			statesUpdated();
 		});
+		if (priceIds.length > 0) loadPriceForecast(priceIds);
+	}
+
+	// the readings since the last time, added to a meter's hours of today
+	function meterMore(hist, rows, midnight) {
+		var out = {today: hist.today.slice(0), yesterday: hist.yesterday, last: hist.last, day: hist.day};
+		for (var k = 0; k < rows.length; k++) {
+			var v = parseFloat(rows[k].state);
+			if (isNaN(v)) continue;
+			var t = parseTime(rows[k].last_changed || rows[k].last_updated);
+			if (out.last !== null) {
+				var inc = increment(out.last, v);
+				// the first row is the state at the start of the period, often from earlier: it counts in this hour
+				var hour = isNaN(t.getTime()) || t < midnight ? new Date().getHours() : t.getHours();
+				out.today[hour] += inc;
+			}
+			out.last = v;
+		}
+		return out;
+	}
+
+	// a price's values since the last time: from its hour on
+	function priceMore(hist, rows, midnight) {
+		var out = {today: hist.today.slice(0), yesterday: hist.yesterday, last: hist.last, day: hist.day, price: true};
+		for (var k = 0; k < rows.length; k++) {
+			var v = parseFloat(rows[k].state);
+			var t = parseTime(rows[k].last_changed || rows[k].last_updated);
+			if (isNaN(v) || isNaN(t.getTime()) || t < midnight) continue;
+			for (var h = t.getHours(); h < 24; h++) out.today[h] = v;
+			out.last = v;
+		}
+		return out;
+	}
+
+	function zeros() { var z = []; for (var h = 0; h < 24; h++) z.push(0); return z; }
+
+	// a meter's readings -> its increments per hour, yesterday and today
+	function meterHistory(rows, yesterday, midnight, day) {
+		var out = {today: zeros(), yesterday: zeros(), last: null, day: day};
+		for (var k = 0; k < rows.length; k++) {
+			var v = parseFloat(rows[k].state);
+			if (isNaN(v)) continue;
+			var t = parseTime(rows[k].last_changed || rows[k].last_updated);
+			if (out.last !== null && !isNaN(t.getTime())) {
+				var inc = increment(out.last, v);
+				if (t >= midnight) out.today[t.getHours()] += inc;
+				else if (t >= yesterday) out.yesterday[t.getHours()] += inc;
+			}
+			out.last = v;
+		}
+		return out.last === null ? null : out;
+	}
+
+	// a price's values -> the price in each hour (the last value at the start of the hour, else in it), yesterday and today
+	function priceHistory(rows, yesterday, midnight, day) {
+		var points = [];
+		for (var k = 0; k < rows.length; k++) {
+			var v = parseFloat(rows[k].state);
+			var t = parseTime(rows[k].last_changed || rows[k].last_updated);
+			if (!isNaN(v) && !isNaN(t.getTime())) points.push({t: t.getTime(), v: v});
+		}
+		if (points.length === 0) return null;
+		var out = {today: [], yesterday: [], last: points[points.length - 1].v, day: day, price: true};
+		for (var h = 0; h < 48; h++) {
+			var start = yesterday.getTime() + h * 3600 * 1000;
+			var value = null;
+			for (var p = 0; p < points.length; p++) {
+				if (points[p].t <= start + 30 * 60 * 1000) value = points[p].v;      // the last change before half past
+				else break;
+			}
+			if (value === null) value = points[0].v;
+			(h < 24 ? out.yesterday : out.today).push(value);
+		}
+		return out;
+	}
+
+	// a dynamic contract's prices for today, from the price entity's attributes when it has them:
+	// Nordpool (today: [24 or 96 numbers], raw_today: [{start, value}]), ENTSO-e (prices_today: [{time, price}]),
+	// others (prices: [{from|start|time, price|value}])
+	function loadPriceForecast(ids) {
+		var parts = [];
+		for (var i = 0; i < ids.length; i++) {
+			var q = jsonString(ids[i]);
+			parts.push(q + ": [state_attr(" + q + ", 'today'), state_attr(" + q + ", 'raw_today'), state_attr(" + q + ", 'prices_today'), state_attr(" + q + ", 'prices')]");
+		}
+		template("{# energy prices #}{{ {" + parts.join(", ") + "} | tojson }}", function(res, err) {
+			if (res === null) return;
+			var map = {};
+			for (var id in res) {
+				var hours = priceHours(res[id]);
+				if (hours) map[id] = hours;
+			}
+			priceForecast = map;
+			statesUpdated();
+		});
+	}
+
+	// the attributes -> 24 prices (an hour's average when they come per quarter), or null
+	function priceHours(a) {
+		if (!a) return null;
+		var today = new Date().toDateString();
+		var sums = zeros(), counts = zeros(), any = false;
+		function add(h, v) { if (typeof v === "number" && h >= 0 && h < 24) { sums[h] += v; counts[h]++; any = true; } }
+		if (a[0] && a[0].length) {                       // today: [24] or [96]
+			var per = a[0].length >= 96 ? 4 : (a[0].length >= 48 ? 2 : 1);
+			for (var i = 0; i < a[0].length; i++) add(Math.floor(i / per), a[0][i]);
+		} else {
+			var lists = [a[1], a[2], a[3]];
+			for (var l = 0; l < lists.length; l++) {
+				var list = lists[l];
+				if (!list || !list.length) continue;
+				for (var k = 0; k < list.length; k++) {
+					var e = list[k];
+					var t = parseTime(e.start || e.from || e.time || e.startsAt);
+					if (isNaN(t.getTime()) || t.toDateString() !== today) continue;
+					add(t.getHours(), typeof e.value === "number" ? e.value : (typeof e.price === "number" ? e.price : e.total));
+				}
+				if (any) break;
+			}
+		}
+		if (!any) return null;
+		var out = [];
+		for (var h = 0; h < 24; h++) out.push(counts[h] ? sums[h] / counts[h] : null);
+		return out;
 	}
 
 	// a meter reading went from a to b: the use in between. A drop is a reset (a daily meter, a new meter)
@@ -1041,10 +1179,10 @@ App {
 		var today = new Date().toDateString();
 		for (var i = 0; i < list.length; i++) {
 			var hist = energyHistory[list[i]];
-			if (!hist || hist.day !== today) continue;
+			if (!hist || hist.day !== today || hist.price) continue;
 			var s = haStates[list[i]];
 			var f = energyFactor(s ? s.unit : "", key);
-			for (var k = 0; k < 24; k++) hours[k] += hist.hours[k] * f;
+			for (var k = 0; k < 24; k++) hours[k] += hist.today[k] * f;
 			// what the meter did since the history was fetched
 			var v = s ? parseFloat(s.state) : NaN;
 			if (!isNaN(v)) hours[nowHour] += increment(hist.last, v) * f;
@@ -1054,6 +1192,91 @@ App {
 		var total = 0;
 		for (var t = 0; t < 24; t++) total += hours[t];
 		return {total: total, hours: hours};
+	}
+
+	// yesterday's use of a meter field: {total, hours: [24], sameTime: up to this time of day}; null when unknown
+	function energyYesterday(key) {
+		var list = energy[key] || [];
+		var hours = zeros(), any = false;
+		var today = new Date().toDateString();
+		for (var i = 0; i < list.length; i++) {
+			var hist = energyHistory[list[i]];
+			if (!hist || hist.day !== today || hist.price) continue;
+			var s = haStates[list[i]];
+			var f = energyFactor(s ? s.unit : "", key);
+			for (var k = 0; k < 24; k++) hours[k] += hist.yesterday[k] * f;
+			any = true;
+		}
+		if (!any) return null;
+		var now = new Date(), total = 0, same = 0;
+		for (var h = 0; h < 24; h++) {
+			total += hours[h];
+			if (h < now.getHours()) same += hours[h];
+			else if (h === now.getHours()) same += hours[h] * now.getMinutes() / 60;
+		}
+		return {total: total, hours: hours, sameTime: same};
+	}
+
+	// a price field in euro per kWh (or per m³), per hour of today: [24] or null. From the attributes (a dynamic
+	// contract's prices), else the history, else the price now. More entities are added up (e.g. a price and a surcharge)
+	function priceToday(key) {
+		var list = energy[key] || [];
+		if (list.length === 0) return null;
+		var out = zeros(), any = false;
+		var today = new Date().toDateString(), nowHour = new Date().getHours();
+		for (var i = 0; i < list.length; i++) {
+			var id = list[i];
+			var s = haStates[id];
+			var f = priceFactor(s ? s.unit : "");
+			var now = s ? parseFloat(s.state) : NaN;
+			var fc = priceForecast[id], hist = energyHistory[id];
+			for (var h = 0; h < 24; h++) {
+				var v = null;
+				if (fc && typeof fc[h] === "number") v = fc[h];
+				else if (hist && hist.price && hist.day === today && h <= nowHour) v = hist.today[h];
+				if (h === nowHour && !isNaN(now) && !(fc && typeof fc[h] === "number")) v = now;
+				if (v === null && !isNaN(now)) v = now;             // a fixed tariff: the same all day
+				if (v !== null) { out[h] += v * f; any = true; }
+			}
+		}
+		return any ? out : null;
+	}
+
+	function priceNow(key) {
+		var p = priceToday(key);
+		return p ? p[new Date().getHours()] : null;
+	}
+
+	function priceFactor(unit) {
+		if (unit === "ct/kWh") return 0.01;
+		if (unit === "EUR/MWh" || unit === "€/MWh") return 0.001;
+		return 1;
+	}
+
+	// today's costs of a panel in euro, or null without a price: electricity (use minus what went back), gas, water
+	function energyCost(panel) {
+		var cost = 0;
+		if (panel === "electricity") {
+			var use = energyToday("usage"), back = energyToday("export");
+			var pu = priceToday("priceUsage"), pe = priceToday("priceExport") || pu;
+			if (!pu || (!use && !back)) return null;
+			for (var h = 0; h < 24; h++) {
+				if (use) cost += use.hours[h] * pu[h];
+				if (back && pe) cost -= back.hours[h] * pe[h];
+			}
+			return cost;
+		}
+		var key = panel === "gas" ? "gas" : "water";
+		var t = energyToday(key), p = priceToday(panel === "gas" ? "priceGas" : "priceWater");
+		if (!t || !p) return null;
+		var perUnit = key === "water" ? 0.001 : 1;         // water is in litres, its price per m³
+		for (var k = 0; k < 24; k++) cost += t.hours[k] * perUnit * p[k];
+		return cost;
+	}
+
+	function euro(v, digits) {
+		if (v === null || v === undefined) return "-";
+		return (v < 0 ? "− " : "") + "€ " + i18n.number(Math.abs(v), digits === undefined ? 2 : digits, 0);
 	}
 
 	function energyNumber(v, key) {
@@ -1774,6 +1997,7 @@ App {
 			if (m.energy) {
 				energy = cleanEnergy(m.energy);
 				energyHistory = {};
+				energyHistUntil = 0;
 				loadEnergyHistory();
 			}
 			setEntities(m.entities || []);

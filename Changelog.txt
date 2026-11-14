@@ -1,4 +1,7 @@
 1.2.0
+- Energie: yesterday up to this time (and yesterday's hours behind today's), today's costs with price entities
+  (worked out per hour), and a Stroomprijs panel with today's price per hour (dynamic contracts) and the cheapest hour
+- Energie: the history is fetched in full once, then only the readings since the last time (lighter for the Toon)
 - Cameras: a moving picture (an animated GIF, e.g. a rain radar) plays and loops, and isn't fetched again every
   few seconds (only with a new camera token)
 - Live updates over Home Assistant's WebSocket API (subscribe_entities): changes show at once; polling only when

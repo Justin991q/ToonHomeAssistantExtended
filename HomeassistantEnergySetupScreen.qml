@@ -115,9 +115,11 @@ Screen {
 		font.family: qfont.regular.name
 		font.pixelSize: isNxt ? 15 : 12
 		color: "#6b6b6b"
-		text: fields[fieldIndex].total
-			? "Een meterstand die oploopt (" + fields[fieldIndex].units.join(", ") + "). Het verbruik van vandaag rekent de app zelf uit."
-			: "Het vermogen nu (" + fields[fieldIndex].units.join(", ") + ")."
+		text: fields[fieldIndex].price
+			? "Een prijs (" + fields[fieldIndex].units.join(", ") + "): vast, of het uurtarief van een dynamisch contract. Meer entiteiten worden opgeteld (bijv. prijs + opslag)."
+			: (fields[fieldIndex].total
+				? "Een meterstand die oploopt (" + fields[fieldIndex].units.join(", ") + "). Het verbruik van vandaag rekent de app zelf uit."
+				: "Het vermogen nu (" + fields[fieldIndex].units.join(", ") + ").")
 	}
 
 	ListView {
