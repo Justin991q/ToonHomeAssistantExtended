@@ -418,7 +418,7 @@ App {
 		var d = domainOf(id);
 		var unit = haStates[id] ? haStates[id].unit : "";
 		var map = {light: "bulb", "switch": "plug", fan: "fan", cover: "blinds", lock: "lock", alarm_control_panel: "shield",
-			scene: "play", script: "play", button: "button", input_button: "button", climate: "thermometer", water_heater: "flame",
+			scene: "palette", script: "play", button: "button", input_button: "button", climate: "thermometer", water_heater: "flame",
 			media_player: "speaker", person: "person", device_tracker: "person", binary_sensor: "eye", input_boolean: "toggle",
 			automation: "bolt", vacuum: "robot", humidifier: "droplet", camera: "camera", weather: "sun"};
 		if (d === "climate" && attr(id, "hvac_action") === "heating") return "flame";

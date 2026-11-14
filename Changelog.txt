@@ -1,3 +1,6 @@
+1.2.1
+- Scenes have a palette icon (scripts keep the play icon)
+
 1.2.0
 - Choose what the tile shows (up to four, in your order): Instellingen > Tegel, or the web editor; else the favourites
 - Buttons on the alarm, thermostat and fan screens are only rebuilt when they change (a tap is no longer lost
