@@ -1,0 +1,11 @@
+1.0.0
+- First version: Home Assistant entities on the Toon (tile, list per area / name / own order, favourites)
+- Setup on the Toon and in a web editor (http://<toon-ip>/homeassistant.html, port 8137)
+- Entity chooser with search, area and type filters, rename and favourites
+- Alarm panels with and without code (keypad for numeric codes)
+- Optional Home Assistant icon in the systray
+- Lights: brightness, colour and colour temperature (light screen from the list)
+- Logo shown at the right size in the tile chooser
+- Renamed to Home-Assistant Extended
+- Web editor shows how to fix a missing connection: "Flush firewall rules" (Instellingen > TSC)
+- Folder renamed to homeassistantExtended

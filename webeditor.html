@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home-Assistant Extended</title>
+<link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNDAgMjQwIiB3aWR0aD0iMjQwIiBoZWlnaHQ9IjI0MCI+CiAgPCEtLSBIb21lIEFzc2lzdGFudCBtYXJrOiBhIGhvdXNlIHdpdGggdGhlIG5vZGUgdHJlZSAtLT4KICA8cGF0aCBkPSJNMTIwIDE4IEwyMiAxMDggUTE2IDExNCAxNiAxMjIgVjIxMiBRMTYgMjI0IDI4IDIyNCBIMjEyIFEyMjQgMjI0IDIyNCAyMTIgVjEyMiBRMjI0IDExNCAyMTggMTA4IFoiIGZpbGw9IiMxOEJDRjIiLz4KICA8ZyBmaWxsPSJub25lIiBzdHJva2U9IiNmZmZmZmYiIHN0cm9rZS13aWR0aD0iMTEiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+CiAgICA8bGluZSB4MT0iMTIwIiB5MT0iMTA0IiB4Mj0iMTIwIiB5Mj0iMjI0Ii8+CiAgICA8cG9seWxpbmUgcG9pbnRzPSI4NiwxMzggODYsMTU0IDEyMCwxODYiLz4KICAgIDxwb2x5bGluZSBwb2ludHM9IjE1NCwxNTIgMTU0LDE3MCAxMjAsMjA0Ii8+CiAgICA8Y2lyY2xlIGN4PSIxMjAiIGN5PSI4OCIgcj0iMTUiLz4KICAgIDxjaXJjbGUgY3g9Ijg2IiBjeT0iMTIyIiByPSIxNSIvPgogICAgPGNpcmNsZSBjeD0iMTU0IiBjeT0iMTM2IiByPSIxNSIvPgogIDwvZz4KPC9zdmc+Cg==">
+<style>
+:root {
+	--bg: #f3f5f8; --card: #ffffff; --text: #1d2430; --muted: #6b7584; --line: #e2e6ec;
+	--accent: #1f8ad4; --accent-soft: #e5f2fb; --star: #f5a623; --ok: #2e9d4f; --err: #d0342c;
+}
+@media (prefers-color-scheme: dark) {
+	:root { --bg: #14181e; --card: #1d232b; --text: #e6e9ee; --muted: #8e98a6; --line: #2c343e;
+		--accent: #4aa8ec; --accent-soft: #1d3346; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: var(--card); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+header h1 { font-size: 18px; margin: 0; flex: 1; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--err); display: inline-block; }
+.dot.on { background: var(--ok); }
+#status { color: var(--muted); font-size: 13px; }
+main { max-width: 1280px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
+.card h2 { font-size: 16px; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+.card h2 .count { color: var(--muted); font-weight: normal; }
+#connection { grid-column: 1 / -1; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+label.f { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); flex: 1; min-width: 220px; }
+input[type=text], input[type=password], input[type=search], select {
+	font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; min-width: 0; }
+input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 6px; padding: 7px 12px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.icon { padding: 4px 8px; line-height: 1; }
+button:disabled { opacity: .45; cursor: default; }
+.msg { font-size: 13px; }
+.msg.ok { color: var(--ok); } .msg.err { color: var(--err); }
+.list { max-height: calc(100vh - 330px); min-height: 300px; overflow-y: auto; border-top: 1px solid var(--line); margin-top: 8px; }
+.area { position: sticky; top: 0; background: var(--card); font-weight: 600; padding: 10px 4px 4px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; z-index: 1; }
+.area small { color: var(--muted); font-weight: normal; cursor: pointer; }
+.ent { display: flex; align-items: center; gap: 10px; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+.ent.sel { background: var(--accent-soft); }
+.ent .info { flex: 1; min-width: 0; }
+.ent .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ent .id { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ent .state { font-size: 13px; color: var(--muted); white-space: nowrap; max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+.ent input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
+.ent input.rename { flex: 1; min-width: 0; }
+.star { background: none; border: none; font-size: 20px; color: var(--muted); padding: 0 4px; }
+.star.on { color: var(--star); }
+.empty { color: var(--muted); padding: 24px 4px; text-align: center; }
+#savebar { position: sticky; bottom: 0; grid-column: 1 / -1; display: none; justify-content: flex-end; align-items: center; gap: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 16px; box-shadow: 0 -2px 12px rgba(0,0,0,.08); }
+#savebar.show { display: flex; }
+.hint { max-width: 1280px; margin: 16px auto 0; padding: 12px 16px; border-radius: 10px; background: #fff4d6; color: #5a4300; border: 1px solid #f0d58a; }
+@media (prefers-color-scheme: dark) { .hint { background: #3a3014; color: #f3e2b0; border-color: #6b5a24; } }
+@media (max-width: 860px) {
+	main { grid-template-columns: 1fr; padding: 16px; }
+	.list { max-height: 60vh; }
+	.ent .state { display: none; }
+}
+</style>
+</head>
+<body>
+<header>
+	<img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNDAgMjQwIiB3aWR0aD0iMjQwIiBoZWlnaHQ9IjI0MCI+CiAgPCEtLSBIb21lIEFzc2lzdGFudCBtYXJrOiBhIGhvdXNlIHdpdGggdGhlIG5vZGUgdHJlZSAtLT4KICA8cGF0aCBkPSJNMTIwIDE4IEwyMiAxMDggUTE2IDExNCAxNiAxMjIgVjIxMiBRMTYgMjI0IDI4IDIyNCBIMjEyIFEyMjQgMjI0IDIyNCAyMTIgVjEyMiBRMjI0IDExNCAyMTggMTA4IFoiIGZpbGw9IiMxOEJDRjIiLz4KICA8ZyBmaWxsPSJub25lIiBzdHJva2U9IiNmZmZmZmYiIHN0cm9rZS13aWR0aD0iMTEiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+CiAgICA8bGluZSB4MT0iMTIwIiB5MT0iMTA0IiB4Mj0iMTIwIiB5Mj0iMjI0Ii8+CiAgICA8cG9seWxpbmUgcG9pbnRzPSI4NiwxMzggODYsMTU0IDEyMCwxODYiLz4KICAgIDxwb2x5bGluZSBwb2ludHM9IjE1NCwxNTIgMTU0LDE3MCAxMjAsMjA0Ii8+CiAgICA8Y2lyY2xlIGN4PSIxMjAiIGN5PSI4OCIgcj0iMTUiLz4KICAgIDxjaXJjbGUgY3g9Ijg2IiBjeT0iMTIyIiByPSIxNSIvPgogICAgPGNpcmNsZSBjeD0iMTU0IiBjeT0iMTM2IiByPSIxNSIvPgogIDwvZz4KPC9zdmc+Cg==" alt="" width="28" height="28">
+	<span class="dot" id="dot"></span>
+	<h1>Home-Assistant Extended <small style="font-weight:normal;color:var(--muted)">op Toon</small></h1>
+	<span id="status">verbinden met Toon…</span>
+</header>
+<div id="fwHint" class="hint" hidden>Geen verbinding met de app op de Toon (WebSocket-poort <span id="fwPort"></span>). Druk op de Toon op <b>Instellingen &gt; TSC &gt; Flush firewall rules</b>, dan maakt deze pagina vanzelf verbinding. Een herstart van de Toon is niet nodig.</div>
+
+<main>
+	<section class="card" id="connection">
+		<h2>Verbinding met Home Assistant</h2>
+		<div class="row">
+			<label class="f">Adres
+				<input type="text" id="url" placeholder="http://192.168.1.10:8123" autocomplete="off">
+			</label>
+			<label class="f">Long-lived access token
+				<input type="password" id="token" placeholder="leeg laten = huidig token houden" autocomplete="off">
+			</label>
+		</div>
+		<div class="row">
+			<button id="testBtn">Test verbinding</button>
+			<button id="connBtn" class="primary">Verbinding opslaan</button>
+			<span class="msg" id="connMsg"></span>
+		</div>
+		<div class="row">
+			<label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="systray"> Home Assistant-icoon in de systray van de Toon (bovenbalk)</label>
+		</div>
+	</section>
+
+	<section class="card">
+		<h2>Alle entiteiten <span class="count" id="allCount"></span>
+			<button class="icon" id="refreshBtn" title="Opnieuw ophalen uit Home Assistant" style="margin-left:auto">⟳</button></h2>
+		<div class="row">
+			<input type="search" id="search" placeholder="Zoek op naam of entity id" style="flex:2;min-width:160px">
+			<select id="areaSel"></select>
+			<select id="domainSel"></select>
+			<label style="font-size:13px;display:flex;gap:4px;align-items:center"><input type="checkbox" id="onlySel"> alleen gekozen</label>
+		</div>
+		<div class="list" id="allList"></div>
+	</section>
+
+	<section class="card">
+		<h2>Gekozen <span class="count" id="selCount"></span></h2>
+		<div class="row">
+			<span style="font-size:13px;color:var(--muted)">Volgorde (voor "Eigen volgorde" op de Toon):</span>
+			<button id="sortArea">Sorteer per ruimte</button>
+			<button id="sortName">Sorteer op naam</button>
+			<button id="favFirst">Favorieten eerst</button>
+		</div>
+		<div class="list" id="selList"></div>
+	</section>
+
+	<div id="savebar">
+		<span class="msg">Niet opgeslagen wijzigingen</span>
+		<button id="undoBtn">Ongedaan maken</button>
+		<button id="saveBtn" class="primary">Opslaan op Toon</button>
+	</div>
+</main>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+const WS_PORT = /^\d+$/.test("__WS_PORT__") ? "__WS_PORT__" : "8137";   // the app fills in its port when it publishes the page
+const wsUrl = params.get("ws") || ("ws://" + (location.hostname || "127.0.0.1") + ":" + WS_PORT);
+
+let ws = null;
+let server = null;         // the Toon's last state message
+let chosen = [];           // working copy: [{id, name, fav}]
+let dirty = false;
+let pendingConnMsg = "";
+let failures = 0;          // failed connection attempts in a row
+
+// ---- connection with the Toon ----
+function connect() {
+	ws = new WebSocket(wsUrl);
+	ws.onopen = () => { failures = 0; $("fwHint").hidden = true; setStatus("verbonden met Toon"); send({type: "get"}); };
+	ws.onclose = () => {
+		setStatus("geen verbinding met Toon, opnieuw proberen…", false);
+		if (++failures >= 2) { $("fwPort").textContent = wsUrl.split(":").pop(); $("fwHint").hidden = false; }   // the firewall, most likely
+		setTimeout(connect, 3000);
+	};
+	ws.onerror = () => {};
+	ws.onmessage = (ev) => {
+		let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+		if (m.type === "state") onState(m);
+		else if (m.type === "test") setConnMsg(m.message, m.ok);
+		else if (m.type === "saved") { dirty = false; updateSavebar(); setStatus("opgeslagen op Toon"); }
+	};
+}
+function send(obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); }
+function setStatus(text, ok) {
+	$("status").textContent = text;
+	if (ok !== undefined) $("dot").classList.toggle("on", ok);
+}
+function setConnMsg(text, ok) {
+	const el = $("connMsg");
+	el.textContent = text;
+	el.className = "msg " + (ok === undefined ? "" : (ok ? "ok" : "err"));
+}
+
+function onState(m) {
+	const first = server === null;
+	server = m;
+	$("dot").classList.toggle("on", !!m.connected);
+	setStatus(m.connected ? "Toon is verbonden met Home Assistant" + (m.version ? " · app " + m.version : "")
+		: (m.url ? "Toon: geen verbinding met Home Assistant" + (m.error ? " (" + m.error + ")" : "") : "Home Assistant nog niet ingesteld"), !!m.connected);
+	if (first || document.activeElement !== $("url")) $("url").value = m.url || "";
+	$("token").placeholder = m.hasToken ? "ingesteld – leeg laten om te houden" : "plak hier je token";
+	if (m.loading) $("allCount").textContent = "(ophalen…)";
+	if (!dirty) $("systray").checked = !!m.systray;
+	if (!dirty) chosen = m.entities.map(e => ({id: e.id, name: e.name || "", fav: !!e.fav}));
+	fillFilters();
+	render();
+}
+
+// ---- helpers ----
+const byId = () => { const map = {}; (server ? server.all : []).forEach(e => map[e.id] = e); return map; };
+const isChosen = (id) => chosen.some(c => c.id === id);
+const areaRank = (a) => { if (!a) return 1e6; const i = server.areas.indexOf(a); return i >= 0 ? i : 5e5; };
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+function markDirty() { dirty = true; updateSavebar(); }
+function updateSavebar() { $("savebar").classList.toggle("show", dirty); }
+
+function fillFilters() {
+	const areaSel = $("areaSel"), domSel = $("domainSel");
+	const keepA = areaSel.options.length ? areaSel.value : "*", keepD = domSel.options.length ? domSel.value : "*";
+	const areas = server.areas.slice();
+	if (server.all.some(e => !e.area)) areas.push("");
+	areaSel.innerHTML = '<option value="*">Alle ruimtes</option>' + areas.map(a => `<option value="${esc(a)}">${esc(a || "Geen ruimte")}</option>`).join("");
+	const domains = [...new Set(server.all.map(e => e.domain))].sort();
+	domSel.innerHTML = '<option value="*">Alle typen</option>' + domains.map(d => `<option>${esc(d)}</option>`).join("");
+	areaSel.value = [...areaSel.options].some(o => o.value === keepA) ? keepA : "*";
+	domSel.value = [...domSel.options].some(o => o.value === keepD) ? keepD : "*";
+}
+
+// ---- rendering ----
+function render() { renderAll(); renderChosen(); }
+
+function renderAll() {
+	if (!server) return;
+	const q = $("search").value.trim().toLowerCase();
+	const area = $("areaSel").value, dom = $("domainSel").value, only = $("onlySel").checked;
+	const list = server.all.filter(e =>
+		(area === "*" || (e.area || "") === area) && (dom === "*" || e.domain === dom) && (!only || isChosen(e.id)) &&
+		(!q || e.id.toLowerCase().includes(q) || (e.name || "").toLowerCase().includes(q)));
+	list.sort((a, b) => areaRank(a.area) - areaRank(b.area) || (a.name || a.id).localeCompare(b.name || b.id));
+	if (!server.loading) $("allCount").textContent = `(${list.length} van ${server.all.length})`;
+	let html = "", lastArea = null;
+	list.forEach(e => {
+		if (e.area !== lastArea) {
+			lastArea = e.area;
+			html += `<div class="area">${esc(e.area || "Geen ruimte")}<small data-area="${esc(e.area)}">alles kiezen</small></div>`;
+		}
+		const sel = isChosen(e.id);
+		html += `<label class="ent${sel ? " sel" : ""}"><input type="checkbox" data-pick="${esc(e.id)}"${sel ? " checked" : ""}>
+			<div class="info"><div class="name">${esc(e.name || e.id)}</div><div class="id">${esc(e.id)}</div></div>
+			<span class="state">${esc(e.state)}</span></label>`;
+	});
+	$("allList").innerHTML = html || `<div class="empty">${server.all.length ? "Niets gevonden." : (server.url ? "Nog geen entiteiten ontvangen van Home Assistant." : "Stel eerst de verbinding in.")}</div>`;
+}
+
+function renderChosen() {
+	if (!server) return;
+	const all = byId();
+	$("selCount").textContent = `(${chosen.length}, ${chosen.filter(c => c.fav).length} favoriet)`;
+	$("selList").innerHTML = chosen.map((c, i) => {
+		const e = all[c.id] || {};
+		return `<div class="ent" data-row="${i}">
+			<button class="star${c.fav ? " on" : ""}" data-fav="${i}" title="Favoriet (op de tegel)">${c.fav ? "★" : "☆"}</button>
+			<div class="info">
+				<input type="text" class="rename" data-name="${i}" value="${esc(c.name)}" placeholder="${esc(e.name || c.id)}" style="width:100%">
+				<div class="id">${esc(c.id)}${e.area ? " · " + esc(e.area) : ""}</div>
+			</div>
+			<button class="icon" data-move="${i}:-1" ${i === 0 ? "disabled" : ""} title="Omhoog">▲</button>
+			<button class="icon" data-move="${i}:1" ${i === chosen.length - 1 ? "disabled" : ""} title="Omlaag">▼</button>
+			<button class="icon" data-remove="${i}" title="Verwijderen">✕</button>
+		</div>`;
+	}).join("") || '<div class="empty">Vink links entiteiten aan om ze op de Toon te tonen.</div>';
+}
+
+// ---- events ----
+$("allList").addEventListener("change", (ev) => {
+	const id = ev.target.dataset.pick;
+	if (!id) return;
+	if (ev.target.checked) { if (!isChosen(id)) chosen.push({id, name: "", fav: false}); }
+	else chosen = chosen.filter(c => c.id !== id);
+	markDirty(); render();
+});
+$("allList").addEventListener("click", (ev) => {
+	const area = ev.target.dataset.area;
+	if (area === undefined) return;
+	ev.preventDefault();
+	server.all.filter(e => (e.area || "") === area && !isChosen(e.id)).forEach(e => chosen.push({id: e.id, name: "", fav: false}));
+	markDirty(); render();
+});
+$("selList").addEventListener("click", (ev) => {
+	const t = ev.target.closest("button");
+	if (!t) return;
+	if (t.dataset.fav !== undefined) { const c = chosen[+t.dataset.fav]; c.fav = !c.fav; }
+	else if (t.dataset.remove !== undefined) chosen.splice(+t.dataset.remove, 1);
+	else if (t.dataset.move) {
+		const [i, d] = t.dataset.move.split(":").map(Number);
+		const j = i + d;
+		if (j < 0 || j >= chosen.length) return;
+		[chosen[i], chosen[j]] = [chosen[j], chosen[i]];
+	} else return;
+	markDirty(); render();
+});
+$("selList").addEventListener("input", (ev) => {
+	const i = ev.target.dataset.name;
+	if (i === undefined) return;
+	chosen[+i].name = ev.target.value;
+	markDirty();
+});
+["search", "areaSel", "domainSel", "onlySel"].forEach(id => $(id).addEventListener("input", renderAll));
+
+function sortChosen(fn) { chosen.sort(fn); markDirty(); renderChosen(); }
+const nameOf = (c) => (c.name || (byId()[c.id] || {}).name || c.id).toLowerCase();
+$("sortName").onclick = () => sortChosen((a, b) => nameOf(a).localeCompare(nameOf(b)));
+$("sortArea").onclick = () => { const all = byId(); sortChosen((a, b) => areaRank((all[a.id] || {}).area) - areaRank((all[b.id] || {}).area) || nameOf(a).localeCompare(nameOf(b))); };
+$("favFirst").onclick = () => sortChosen((a, b) => (b.fav ? 1 : 0) - (a.fav ? 1 : 0));
+
+$("systray").addEventListener("change", markDirty);
+$("saveBtn").onclick = () => send({type: "save", systray: $("systray").checked, entities: chosen.map(c => ({id: c.id, name: c.name.trim(), fav: c.fav}))});
+$("undoBtn").onclick = () => { dirty = false; updateSavebar(); onState(server); };
+$("refreshBtn").onclick = () => { $("allCount").textContent = "(ophalen…)"; send({type: "refresh"}); };
+$("testBtn").onclick = () => { setConnMsg("testen…"); send({type: "test", url: $("url").value.trim(), token: $("token").value.trim()}); };
+$("connBtn").onclick = () => {
+	send({type: "connection", url: $("url").value.trim(), token: $("token").value.trim()});
+	$("token").value = "";
+	setConnMsg("opgeslagen, entiteiten worden opgehaald…", true);
+};
+window.addEventListener("beforeunload", (ev) => { if (dirty) { ev.preventDefault(); ev.returnValue = ""; } });
+
+connect();
+</script>
+</body>
+</html>
