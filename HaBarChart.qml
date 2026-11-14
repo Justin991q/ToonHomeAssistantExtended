@@ -24,9 +24,9 @@ Item {
 	property int nowHour: new Date().getHours()
 
 	function maxOf(list) {
-		var m = 0;
-		for (var i = 0; list && i < list.length; i++) if (list[i] > m) m = list[i];
-		return m;
+		var highest = 0;
+		for (var i = 0; list && i < list.length; i++) if (list[i] > highest) highest = list[i];
+		return highest;
 	}
 
 	Rectangle {
@@ -44,31 +44,31 @@ Item {
 			height: chart.plotHeight
 			// yesterday, behind
 			Rectangle {
-				property real v: chart.ghostValues && chart.ghostValues.length > index ? chart.ghostValues[index] : 0
-				visible: v > 0
+				property real amount: chart.ghostValues && chart.ghostValues.length > index ? chart.ghostValues[index] : 0
+				visible: amount > 0
 				width: Math.max(2, parent.width - 2)
 				anchors.horizontalCenter: parent.horizontalCenter
-				height: chart.maxUp > 0 ? Math.max(2, (chart.zeroY - 1) * v / chart.maxUp) : 0
+				height: chart.maxUp > 0 ? Math.max(2, (chart.zeroY - 1) * amount / chart.maxUp) : 0
 				y: chart.zeroY - height
 				radius: 1
 				color: chart.ghostColor
 			}
 			Rectangle {
-				property real v: chart.values && chart.values.length > index ? chart.values[index] : 0
+				property real amount: chart.values && chart.values.length > index ? chart.values[index] : 0
 				width: Math.max(2, parent.width - 2) * (chart.ghostValues && chart.ghostValues.length ? 0.6 : 1)
 				anchors.horizontalCenter: parent.horizontalCenter
-				height: chart.maxUp > 0 ? Math.max(v > 0 ? 2 : 0, (chart.zeroY - 1) * v / chart.maxUp) : 0
+				height: chart.maxUp > 0 ? Math.max(amount > 0 ? 2 : 0, (chart.zeroY - 1) * amount / chart.maxUp) : 0
 				y: chart.zeroY - height
 				radius: 1
 				color: index === chart.highlight ? chart.highlightColor : chart.barColor
 				opacity: chart.dimFuture && index > chart.nowHour ? 0.3 : 1
 			}
 			Rectangle {
-				property real v: chart.downValues && chart.downValues.length > index ? chart.downValues[index] : 0
-				visible: v > 0
+				property real amount: chart.downValues && chart.downValues.length > index ? chart.downValues[index] : 0
+				visible: amount > 0
 				width: Math.max(2, parent.width - 2) * (chart.ghostValues && chart.ghostValues.length ? 0.6 : 1)
 				anchors.horizontalCenter: parent.horizontalCenter
-				height: chart.maxDown > 0 ? Math.max(2, (chart.plotHeight - chart.zeroY - 1) * v / chart.maxDown) : 0
+				height: chart.maxDown > 0 ? Math.max(2, (chart.plotHeight - chart.zeroY - 1) * amount / chart.maxDown) : 0
 				y: chart.zeroY + 1
 				radius: 1
 				color: index === chart.highlight ? chart.highlightColor : chart.downColor

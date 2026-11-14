@@ -25,8 +25,8 @@ Rectangle {
 
 	function isAdjustable() {
 		if (app.domainOf(entityId) === "fan") return false;          // a tap opens the fan screen
-		var l = app.lightOf(entityId);
-		return l !== null && l !== undefined && (l.dimmable || l.color || l.colorTemp);
+		var light = app.lightOf(entityId);
+		return light !== null && light !== undefined && (light.dimmable || light.color || light.colorTemp);
 	}
 
 	// a light's screen (a fan's opens with a tap)

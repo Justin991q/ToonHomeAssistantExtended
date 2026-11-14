@@ -39,16 +39,16 @@ Screen {
 		app.selectionChanged.disconnect(updateMarks);
 	}
 
-	function matches(e) {
-		if (onlySelected && !app.isSelected(e.id)) return false;
-		if (areaFilter !== "" && (e.area || "Geen ruimte") !== areaFilter) return false;
-		var g = domainGroups[domainIndex].domains;
-		if (g.length === 1 && g[0] === "*") {
-			if (knownDomains.indexOf(e.domain) >= 0) return false;
-		} else if (g.length > 0 && g.indexOf(e.domain) < 0) return false;
+	function matches(entity) {
+		if (onlySelected && !app.isSelected(entity.id)) return false;
+		if (areaFilter !== "" && (entity.area || "Geen ruimte") !== areaFilter) return false;
+		var domains = domainGroups[domainIndex].domains;
+		if (domains.length === 1 && domains[0] === "*") {
+			if (knownDomains.indexOf(entity.domain) >= 0) return false;
+		} else if (domains.length > 0 && domains.indexOf(entity.domain) < 0) return false;
 		if (search !== "") {
-			var s = search.toLowerCase();
-			if (e.id.toLowerCase().indexOf(s) < 0 && e.name.toLowerCase().indexOf(s) < 0 && app.displayName(e.id).toLowerCase().indexOf(s) < 0) return false;
+			var query = search.toLowerCase();
+			if (entity.id.toLowerCase().indexOf(query) < 0 && entity.name.toLowerCase().indexOf(query) < 0 && app.displayName(entity.id).toLowerCase().indexOf(query) < 0) return false;
 		}
 		return true;
 	}
@@ -58,16 +58,16 @@ Screen {
 		for (var i = 0; i < app.allEntities.length; i++) if (matches(app.allEntities[i])) list.push(app.allEntities[i]);
 		// sort keys made once, not in every comparison
 		var keyed = [];
-		for (var n = 0; n < list.length; n++) keyed.push({e: list[n], rank: app.areaRank(list[n].area), name: (list[n].name || list[n].id).toLowerCase()});
-		keyed.sort(function(a, b) {
-			if (a.rank !== b.rank) return a.rank - b.rank;
-			return a.name < b.name ? -1 : (a.name > b.name ? 1 : 0);
+		for (var index = 0; index < list.length; index++) keyed.push({e: list[index], rank: app.areaRank(list[index].area), name: (list[index].name || list[index].id).toLowerCase()});
+		keyed.sort(function(first, second) {
+			if (first.rank !== second.rank) return first.rank - second.rank;
+			return first.name < second.name ? -1 : (first.name > second.name ? 1 : 0);
 		});
 		var rows = [];
 		for (var j = 0; j < keyed.length; j++) {
-			var e = keyed[j].e;
-			var k = app.indexOf(e.id);
-			rows.push({entityId: e.id, haName: e.name || e.id, area: e.area || "Geen ruimte",
+			var entity = keyed[j].e;
+			var k = app.indexOf(entity.id);
+			rows.push({entityId: entity.id, haName: entity.name || entity.id, area: entity.area || "Geen ruimte",
 				selected: k >= 0, fav: k >= 0 && app.entities[k].fav, ownName: k >= 0 ? app.entities[k].name : ""});
 		}
 		entityModel.clear();
@@ -75,7 +75,7 @@ Screen {
 		try { entityModel.append(rows); } catch (err) {}
 		if (entityModel.count !== rows.length) {
 			entityModel.clear();
-			for (var r = 0; r < rows.length; r++) entityModel.append(rows[r]);
+			for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) entityModel.append(rows[rowIndex]);
 		}
 		listView.contentY = 0;
 	}
@@ -96,14 +96,14 @@ Screen {
 		var areas = [""];
 		for (var i = 0; i < app.areaNames.length; i++) areas.push(app.areaNames[i]);
 		areas.push("Geen ruimte");
-		var at = areas.indexOf(areaFilter);
-		areaFilter = areas[(at + 1) % areas.length];
+		var position = areas.indexOf(areaFilter);
+		areaFilter = areas[(position + 1) % areas.length];
 		rebuild();
 	}
 
 	function page(direction) {
-		var y = listView.contentY + direction * (listView.height - rowHeight);
-		listView.contentY = Math.max(0, Math.min(y, listView.contentHeight - listView.height));
+		var top = listView.contentY + direction * (listView.height - rowHeight);
+		listView.contentY = Math.max(0, Math.min(top, listView.contentHeight - listView.height));
 	}
 
 	ListModel { id: entityModel }

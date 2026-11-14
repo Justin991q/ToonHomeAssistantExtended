@@ -32,21 +32,21 @@ Screen {
 		rev++;
 		var key = entityId + JSON.stringify([app.attr(entityId, "preset_modes"), app.haStates[entityId] ? app.haStates[entityId].features : 0]);
 		if (key !== chipKey) { chipKey = key; chipRev++; }
-		var s = app.haStates[entityId];
-		isOn = s ? s.state === "on" : false;
+		var entry = app.haStates[entityId];
+		isOn = entry ? entry.state === "on" : false;
 		if (!speedSlider.dragging) {
-			var p = app.attr(entityId, "percentage");
-			percent = isOn && typeof p === "number" ? Math.round(p) : 0;
+			var percentage = app.attr(entityId, "percentage");
+			percent = isOn && typeof percentage === "number" ? Math.round(percentage) : 0;
 			speedSlider.value = percent / 100;
 		}
 	}
 
 	function stepTo(delta) {
-		var st = app.fanStep(entityId);
-		var p = Math.max(0, Math.min(100, percent + delta * st));
-		percent = p;
-		speedSlider.value = p / 100;
-		app.fanSetPercentage(entityId, p);
+		var step = app.fanStep(entityId);
+		var percentage = Math.max(0, Math.min(100, percent + delta * step));
+		percent = percentage;
+		speedSlider.value = percentage / 100;
+		app.fanSetPercentage(entityId, percentage);
 	}
 
 	// ---- icon, state, on/off ----

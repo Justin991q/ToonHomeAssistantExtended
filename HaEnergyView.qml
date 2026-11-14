@@ -36,15 +36,15 @@ Item {
 	}
 
 	// the cheapest and dearest hour still to come today: "goedkoopst 03:00 € 0,12"
-	function priceSummary(p) {
-		if (!p) return "";
-		var now = new Date().getHours(), lo = -1, hi = -1;
-		for (var h = now; h < 24; h++) {
-			if (lo < 0 || p[h] < p[lo]) lo = h;
-			if (hi < 0 || p[h] > p[hi]) hi = h;
+	function priceSummary(prices) {
+		if (!prices) return "";
+		var now = new Date().getHours(), cheapest = -1, dearest = -1;
+		for (var hour = now; hour < 24; hour++) {
+			if (cheapest < 0 || prices[hour] < prices[cheapest]) cheapest = hour;
+			if (dearest < 0 || prices[hour] > prices[dearest]) dearest = hour;
 		}
-		if (lo < 0 || p[lo] === p[hi]) return "";
-		return "goedkoopst " + app.pad2(lo) + ":00 " + app.euro(p[lo]) + (view.compact ? "" : " · duurst " + app.pad2(hi) + ":00 " + app.euro(p[hi]));
+		if (cheapest < 0 || prices[cheapest] === prices[dearest]) return "";
+		return "goedkoopst " + app.pad2(cheapest) + ":00 " + app.euro(prices[cheapest]) + (view.compact ? "" : " · duurst " + app.pad2(dearest) + ":00 " + app.euro(prices[dearest]));
 	}
 
 	function positive(list) {
@@ -109,11 +109,11 @@ Item {
 					font.pixelSize: isNxt ? 15 : 13
 					color: panel.key === "electricity" && panel.now < 0 ? "#3b7d16" : "#6b6b6b"
 					text: {
-						var nu = view.compact ? "" : "Nu ";              // narrow: just the number, so the title fits
+						var prefix = view.compact ? "" : "Nu ";              // narrow: just the number, so the title fits
 						if (panel.isPrice) return view.compact ? "/kWh" : "per kWh";
 						if (panel.now === null) return "";
-						if (panel.key === "electricity" && panel.now < 0) return nu + app.energyNumber(-panel.now, panel.nowKey) + " terug";
-						return nu + app.energyNumber(panel.now, panel.nowKey);
+						if (panel.key === "electricity" && panel.now < 0) return prefix + app.energyNumber(-panel.now, panel.nowKey) + " terug";
+						return prefix + app.energyNumber(panel.now, panel.nowKey);
 					}
 				}
 
@@ -152,9 +152,9 @@ Item {
 						color: "#6b6b6b"
 						text: {
 							if (panel.isPrice) return view.priceSummary(panel.prices) || "nu";
-							var t = view.has(panel.totalKey) ? (panel.key === "solar" ? "opgewekt vandaag" : "vandaag") : "nu";
-							if (panel.sentBack !== null) t += " · " + app.energyNumber(panel.sentBack.total, "export") + (view.compact ? " terug" : " teruggeleverd");
-							return t;
+							var line = view.has(panel.totalKey) ? (panel.key === "solar" ? "opgewekt vandaag" : "vandaag") : "nu";
+							if (panel.sentBack !== null) line += " · " + app.energyNumber(panel.sentBack.total, "export") + (view.compact ? " terug" : " teruggeleverd");
+							return line;
 						}
 					}
 					// yesterday up to this time of day

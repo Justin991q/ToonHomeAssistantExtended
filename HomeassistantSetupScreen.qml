@@ -146,9 +146,9 @@ Screen {
 		}
 		onClicked: {
 			var list = app.defaultTabChoices();
-			var at = 0;
-			for (var i = 0; i < list.length; i++) if (list[i].key === app.defaultTab) at = i;
-			app.setDefaultTab(list[(at + 1) % list.length].key);
+			var position = 0;
+			for (var i = 0; i < list.length; i++) if (list[i].key === app.defaultTab) position = i;
+			app.setDefaultTab(list[(position + 1) % list.length].key);
 			rev++;
 		}
 	}
@@ -316,8 +316,8 @@ Screen {
 	Rectangle {
 		id: qrFrame
 		visible: app.webEditorKnown()
-		width: visible ? qr.width + 16 : 0
-		height: qr.height + 16
+		width: visible ? qrCode.width + 16 : 0
+		height: qrCode.height + 16
 		radius: 6
 		color: "#ffffff"
 		anchors {
@@ -325,7 +325,7 @@ Screen {
 			right: introText.right
 		}
 		QrCode {
-			id: qr
+			id: qrCode
 			anchors.centerIn: parent
 			height: Math.round(120 * verticalScaling)
 			width: height * designElements.pixelAspectRatio

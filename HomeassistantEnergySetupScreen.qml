@@ -27,18 +27,18 @@ Screen {
 
 	function refresh() {
 		rev++;
-		var f = fields[fieldIndex];
-		var chosen = app.energy[f.key] || [];
+		var field = fields[fieldIndex];
+		var chosen = app.energy[field.key] || [];
 		var out = [];
 		for (var i = 0; i < app.allEntities.length; i++) {
-			var e = app.allEntities[i];
-			if (f.units.indexOf(e.unit) < 0 && chosen.indexOf(e.id) < 0) continue;
-			out.push({id: e.id, name: e.name || e.id, state: e.state, unit: e.unit, chosen: chosen.indexOf(e.id) >= 0});
+			var entity = app.allEntities[i];
+			if (field.units.indexOf(entity.unit) < 0 && chosen.indexOf(entity.id) < 0) continue;
+			out.push({id: entity.id, name: entity.name || entity.id, state: entity.state, unit: entity.unit, chosen: chosen.indexOf(entity.id) >= 0});
 		}
 		// the chosen ones first, then by name
-		out.sort(function(a, b) {
-			if (a.chosen !== b.chosen) return a.chosen ? -1 : 1;
-			return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : (a.name.toLowerCase() > b.name.toLowerCase() ? 1 : 0);
+		out.sort(function(first, second) {
+			if (first.chosen !== second.chosen) return first.chosen ? -1 : 1;
+			return first.name.toLowerCase() < second.name.toLowerCase() ? -1 : (first.name.toLowerCase() > second.name.toLowerCase() ? 1 : 0);
 		});
 		candidates = out;
 	}

@@ -25,12 +25,12 @@ Screen {
 
 	function update() {
 		rev++;
-		var s = app.haStates[entityId];
-		playState = s ? s.state : "";
+		var entry = app.haStates[entityId];
+		playState = entry ? entry.state : "";
 		off = app.mediaIsOff(entityId);
 		sourceBar.refresh();
-		var v = app.attr(entityId, "volume_level");
-		if (!volumeSlider.dragging && typeof v === "number") volumeSlider.value = v;
+		var volume = app.attr(entityId, "volume_level");
+		if (!volumeSlider.dragging && typeof volume === "number") volumeSlider.value = volume;
 	}
 
 	// ---- album art ----
@@ -84,10 +84,10 @@ Screen {
 			text: {
 				if (rev < 0 || off) return "";
 				var parts = [];
-				var a = app.attr(entityId, "media_artist"), al = app.attr(entityId, "media_album_name"), ap = app.attr(entityId, "app_name");
-				if (a) parts.push(a);
-				if (al) parts.push(al);
-				if (parts.length === 0 && ap) parts.push(ap);
+				var artist = app.attr(entityId, "media_artist"), album = app.attr(entityId, "media_album_name"), appName = app.attr(entityId, "app_name");
+				if (artist) parts.push(artist);
+				if (album) parts.push(album);
+				if (parts.length === 0 && appName) parts.push(appName);
 				return parts.join(" · ");
 			}
 		}

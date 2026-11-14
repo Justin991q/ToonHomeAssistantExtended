@@ -67,15 +67,15 @@ Screen {
 		// fill pages row by row as the Flow will: a double card that does not fit on a row starts the next one
 		var list = [], page = [], row = 0, col = 0;
 		for (var i = 0; i < ids.length; i++) {
-			var w = Math.min(columns, app.cardSlots(ids[i]));
-			if (col + w > columns) { row++; col = 0; }
+			var slots = Math.min(columns, app.cardSlots(ids[i]));
+			if (col + slots > columns) { row++; col = 0; }
 			if (row >= rows) { list.push(page); page = []; row = 0; col = 0; }
 			page.push(ids[i]);
-			col += w;
+			col += slots;
 		}
 		if (page.length > 0) list.push(page);
 		pages = list;
-		for (var t = 0; t < tabs.length; t++) if (tabs[t].key === key) screenTitle = tabs[t].label;
+		for (var tabIndex = 0; tabIndex < tabs.length; tabIndex++) if (tabs[tabIndex].key === key) screenTitle = tabs[tabIndex].label;
 		if (tabs.length === 0) screenTitle = app.appName;
 		pagesView.positionViewAtIndex(Math.min(keepIndex, Math.max(0, list.length - 1)), ListView.Beginning);
 		pagesView.currentIndex = Math.min(keepIndex, Math.max(0, list.length - 1));

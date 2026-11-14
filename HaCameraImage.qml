@@ -11,7 +11,7 @@ Item {
 	property string url: ""
 	property int fillMode: Image.PreserveAspectCrop
 	property bool front: false                 // which image is shown: a (false) or b (true)
-	property bool hasPicture: a.status === Image.Ready || b.status === Image.Ready
+	property bool hasPicture: imageA.status === Image.Ready || imageB.status === Image.Ready
 	// once seen moving, remembered for this camera: a picture that is still loading doesn't know its frames yet
 	property bool animated: false
 	onEntityIdChanged: animated = false
@@ -20,7 +20,7 @@ Item {
 	// playing only when it can be seen (whether it moves only shows once it plays; a photo costs nothing).
 	// A picture from the network plays once: at its end it starts again (after a short pause, as a radar does)
 	function updatePlaying(restart) {
-		var list = [a, b];
+		var list = [imageA, imageB];
 		for (var i = 0; i < list.length; i++) {
 			var want = list[i].visible && view.visible && list[i].status === Image.Ready;
 			if (want && restart) list[i].currentFrame = 0;
@@ -31,14 +31,14 @@ Item {
 
 	onUrlChanged: {
 		if (url === "") return;
-		var back = front ? a : b;
-		var shown = front ? b : a;
+		var back = front ? imageA : imageB;
+		var shown = front ? imageB : imageA;
 		if (shown.source.toString() === url) return;
 		back.source = url;
 	}
 
 	AnimatedImage {
-		id: a
+		id: imageA
 		anchors.fill: parent
 		fillMode: view.fillMode
 		cache: true                // keeps the frames: a picture from the network can only be read once, so without this it can't loop
@@ -46,11 +46,11 @@ Item {
 		playing: false
 		onVisibleChanged: view.updatePlaying(false)
 		onPlayingChanged: if (!playing && visible && view.visible) loopTimer.restart()   // played to the end: from the start again
-		onStatusChanged: if (status === Image.Ready && view.front) { view.front = false; b.source = ""; }
+		onStatusChanged: if (status === Image.Ready && view.front) { view.front = false; imageB.source = ""; }
 		onFrameChanged: if (currentFrame > 0) view.animated = true       // it moved on to a next frame (frameCount is 0 while a network picture plays)
 	}
 	AnimatedImage {
-		id: b
+		id: imageB
 		anchors.fill: parent
 		fillMode: view.fillMode
 		cache: true                // keeps the frames: a picture from the network can only be read once, so without this it can't loop
@@ -58,7 +58,7 @@ Item {
 		playing: false
 		onVisibleChanged: view.updatePlaying(false)
 		onPlayingChanged: if (!playing && visible && view.visible) loopTimer.restart()
-		onStatusChanged: if (status === Image.Ready && !view.front) { view.front = true; a.source = ""; }
+		onStatusChanged: if (status === Image.Ready && !view.front) { view.front = true; imageA.source = ""; }
 		onFrameChanged: if (currentFrame > 0) view.animated = true       // it moved on to a next frame (frameCount is 0 while a network picture plays)
 	}
 

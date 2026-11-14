@@ -1,4 +1,5 @@
 1.2.1
+- Code: readable names instead of one- and two-letter variables (QML and web editor)
 - Motion sensors (device_class motion): someone moving when on, crossed out when off (as mdi:motion-sensor / -off)
 - Door contacts (device_class door): an open or a closed door (as mdi:door-open / door-closed)
 - Their state in words: Beweging / Geen beweging, Open / Dicht (also for windows and garage doors)

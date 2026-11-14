@@ -35,7 +35,7 @@ Screen {
 		app.statesUpdated.disconnect(update);
 	}
 
-	function num(v, fallback) { return typeof v === "number" ? v : fallback; }
+	function num(value, fallback) { return typeof value === "number" ? value : fallback; }
 
 	// the button rows are only rebuilt when they change (chipRev): a redraw would drop a tap that is going on
 	property int chipRev: 0
@@ -45,8 +45,8 @@ Screen {
 		rev++;
 		var key = entityId + JSON.stringify([app.attr(entityId, "hvac_modes"), app.attr(entityId, "preset_modes"), app.attr(entityId, "available_modes")]);
 		if (key !== chipKey) { chipKey = key; chipRev++; }
-		var s = app.haStates[entityId];
-		haState = s ? s.state : "";
+		var entry = app.haStates[entityId];
+		haState = entry ? entry.state : "";
 		if (humidifier) {
 			minValue = num(app.attr(entityId, "min_humidity"), 0);
 			maxValue = num(app.attr(entityId, "max_humidity"), 100);
@@ -57,11 +57,11 @@ Screen {
 			step = num(app.attr(entityId, "target_temp_step"), 0.5);
 		}
 		if (editing) return;
-		var t = app.attr(entityId, humidifier ? "humidity" : "temperature");
-		var lo = app.attr(entityId, "target_temp_low"), hi = app.attr(entityId, "target_temp_high");
-		range = !humidifier && typeof t !== "number" && typeof lo === "number" && typeof hi === "number";
-		if (typeof t === "number") target = t;
-		if (range) { low = lo; high = hi; }
+		var targetNow = app.attr(entityId, humidifier ? "humidity" : "temperature");
+		var targetLow = app.attr(entityId, "target_temp_low"), targetHigh = app.attr(entityId, "target_temp_high");
+		range = !humidifier && typeof targetNow !== "number" && typeof targetLow === "number" && typeof targetHigh === "number";
+		if (typeof targetNow === "number") target = targetNow;
+		if (range) { low = targetLow; high = targetHigh; }
 	}
 
 	function hasTarget() {
@@ -69,9 +69,9 @@ Screen {
 		return range || typeof app.attr(entityId, "temperature") === "number";
 	}
 
-	function clamp(v) {
-		v = Math.round(v / step) * step;
-		return Math.max(minValue, Math.min(maxValue, Math.round(v * 10) / 10));
+	function clamp(value) {
+		value = Math.round(value / step) * step;
+		return Math.max(minValue, Math.min(maxValue, Math.round(value * 10) / 10));
 	}
 
 	function change(which, delta) {
@@ -87,7 +87,7 @@ Screen {
 		else app.climateSetTemperature(entityId, target);
 	}
 
-	function valueText(v) { return humidifier ? Math.round(v) + "%" : app.degrees(v); }
+	function valueText(value) { return humidifier ? Math.round(value) + "%" : app.degrees(value); }
 
 	// the mode buttons: [{value, label}] and which one is on
 	function modeList() {
@@ -107,13 +107,13 @@ Screen {
 	}
 	function currentPreset() { return rev >= 0 ? (app.attr(entityId, humidifier ? "mode" : "preset_mode") || "") : ""; }
 
-	function pickMode(v) {
-		if (humidifier) app.humidifierPower(entityId, v === "on");
-		else app.climateSetMode(entityId, v);
+	function pickMode(mode) {
+		if (humidifier) app.humidifierPower(entityId, mode === "on");
+		else app.climateSetMode(entityId, mode);
 	}
-	function pickPreset(v) {
-		if (humidifier) app.humidifierSetMode(entityId, v);
-		else app.climateSetPreset(entityId, v);
+	function pickPreset(preset) {
+		if (humidifier) app.humidifierSetMode(entityId, preset);
+		else app.climateSetPreset(entityId, preset);
 	}
 
 	Timer { id: sendTimer; interval: 1200; onTriggered: send() }
@@ -146,8 +146,8 @@ Screen {
 			text: {
 				if (rev < 0) return "";
 				if (humidifier) return haState === "on" ? (app.attr(entityId, "action") === "humidifying" ? "Bevochtigt" : (app.attr(entityId, "action") === "drying" ? "Droogt" : "Aan")) : "Uit";
-				var a = app.hvacActionText(app.attr(entityId, "hvac_action"));
-				return a ? a.charAt(0).toUpperCase() + a.substring(1) : app.hvacModeText(haState);
+				var action = app.hvacActionText(app.attr(entityId, "hvac_action"));
+				return action ? action.charAt(0).toUpperCase() + action.substring(1) : app.hvacModeText(haState);
 			}
 		}
 		Text {

@@ -41,9 +41,9 @@ Screen {
 	}
 
 	function update() {
-		var s = app.haStates[entityId];
+		var entry = app.haStates[entityId];
 		var was = alarmState;
-		alarmState = s ? s.state : "";
+		alarmState = entry ? entry.state : "";
 		// the new state is in (with live updates often before the command's answer): the buttons work again
 		if (busy && alarmState !== was) busy = false;
 		codeFormat = app.alarmCodeFormat(entityId);

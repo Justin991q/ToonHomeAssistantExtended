@@ -27,15 +27,15 @@ Rectangle {
 		var now = new Date().getTime();
 		var days = ["zo", "ma", "di", "wo", "do", "vr", "za"];
 		for (var i = 0; i < forecast.length && out.length < maxColumns; i++) {
-			var f = forecast[i];
-			if (f.daily) {
-				var d = new Date(f.time);
-				if (d.toDateString() === new Date().toDateString()) continue;   // today is on the left
-				out.push({label: days[d.getDay()], icon: app.weatherIconUrl(f.condition), high: f.temp, low: f.low});
+			var item = forecast[i];
+			if (item.daily) {
+				var day = new Date(item.time);
+				if (day.toDateString() === new Date().toDateString()) continue;   // today is on the left
+				out.push({label: days[day.getDay()], icon: app.weatherIconUrl(item.condition), high: item.temp, low: item.low});
 			} else {
-				if (f.time < now - 30 * 60 * 1000) continue;
-				var h = new Date(f.time);
-				out.push({label: app.pad2(h.getHours()) + ":00", icon: app.weatherIconUrl(f.condition), high: f.temp, low: undefined});
+				if (item.time < now - 30 * 60 * 1000) continue;
+				var hour = new Date(item.time);
+				out.push({label: app.pad2(hour.getHours()) + ":00", icon: app.weatherIconUrl(item.condition), high: item.temp, low: undefined});
 			}
 		}
 		return out;

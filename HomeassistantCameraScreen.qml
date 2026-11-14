@@ -37,8 +37,8 @@ Screen {
 			entityId: cameraScreen.entityId
 			url: {
 				if (picture.animated) return app.cameraUrl(cameraScreen.entityId, true);     // it plays; a new one with a new token
-				var u = cameraScreen.tick >= 0 ? app.cameraUrl(cameraScreen.entityId) : "";
-				return u ? u + "-" + cameraScreen.tick : "";
+				var pictureUrl = cameraScreen.tick >= 0 ? app.cameraUrl(cameraScreen.entityId) : "";
+				return pictureUrl ? pictureUrl + "-" + cameraScreen.tick : "";
 			}
 		}
 	}

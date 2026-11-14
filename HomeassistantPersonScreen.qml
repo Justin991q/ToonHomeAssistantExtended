@@ -99,20 +99,20 @@ Screen {
 		property real worldX: hasLocation ? (lon + 180) / 360 * Math.pow(2, zoom) * 256 : 0
 		property real worldY: {
 			if (!hasLocation) return 0;
-			var r = lat * Math.PI / 180;
-			return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * Math.pow(2, zoom) * 256;
+			var radians = lat * Math.PI / 180;
+			return (1 - Math.log(Math.tan(radians) + 1 / Math.cos(radians)) / Math.PI) / 2 * Math.pow(2, zoom) * 256;
 		}
 		// the tiles that cover the frame: [{x, y, left, top}]
 		property variant tiles: {
 			if (!hasLocation || width <= 0) return [];
 			var out = [];
-			var n = Math.pow(2, zoom);
-			var x0 = Math.floor((worldX - width / 2) / 256), x1 = Math.floor((worldX + width / 2) / 256);
-			var y0 = Math.floor((worldY - height / 2) / 256), y1 = Math.floor((worldY + height / 2) / 256);
-			for (var ty = y0; ty <= y1; ty++) {
-				if (ty < 0 || ty >= n) continue;
-				for (var tx = x0; tx <= x1; tx++) {
-					out.push({url: tileUrl(((tx % n) + n) % n, ty), left: tx * 256 - worldX + width / 2, top: ty * 256 - worldY + height / 2});
+			var tileCount = Math.pow(2, zoom);
+			var firstX = Math.floor((worldX - width / 2) / 256), lastX = Math.floor((worldX + width / 2) / 256);
+			var firstY = Math.floor((worldY - height / 2) / 256), lastY = Math.floor((worldY + height / 2) / 256);
+			for (var tileY = firstY; tileY <= lastY; tileY++) {
+				if (tileY < 0 || tileY >= tileCount) continue;
+				for (var tileX = firstX; tileX <= lastX; tileX++) {
+					out.push({url: tileUrl(((tileX % tileCount) + tileCount) % tileCount, tileY), left: tileX * 256 - worldX + width / 2, top: tileY * 256 - worldY + height / 2});
 				}
 			}
 			return out;

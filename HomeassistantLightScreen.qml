@@ -34,40 +34,40 @@ Screen {
 	onHidden: app.statesUpdated.disconnect(update)
 
 	function update() {
-		var s = app.haStates[entityId];
-		var l = app.lightOf(entityId);
-		isOn = s ? s.state === "on" : false;
-		dimmable = l ? l.dimmable : false;
-		hasColor = l ? l.color : false;
-		hasColorTemp = l ? l.colorTemp : false;
-		if (l) {
-			minKelvin = l.minKelvin;
-			maxKelvin = l.maxKelvin;
+		var entry = app.haStates[entityId];
+		var light = app.lightOf(entityId);
+		isOn = entry ? entry.state === "on" : false;
+		dimmable = light ? light.dimmable : false;
+		hasColor = light ? light.color : false;
+		hasColorTemp = light ? light.colorTemp : false;
+		if (light) {
+			minKelvin = light.minKelvin;
+			maxKelvin = light.maxKelvin;
 		}
 		// a slider being dragged keeps its own position
 		if (!brightnessSlider.dragging) {
 			percent = isOn ? app.lightPercent(entityId) : 0;
 			brightnessSlider.value = percent / 100;
 		}
-		if (l && !hueSlider.dragging) hueSlider.value = l.hue / 360;
-		if (l && !tempSlider.dragging && l.kelvin > 0) tempSlider.value = (l.kelvin - minKelvin) / Math.max(1, maxKelvin - minKelvin);
-		currentColor.color = currentColorOf(l);
+		if (light && !hueSlider.dragging) hueSlider.value = light.hue / 360;
+		if (light && !tempSlider.dragging && light.kelvin > 0) tempSlider.value = (light.kelvin - minKelvin) / Math.max(1, maxKelvin - minKelvin);
+		currentColor.color = currentColorOf(light);
 	}
 
-	function currentColorOf(l) {
-		if (!isOn || !l) return "#d0d0d0";
-		if (l.colorMode === "color_temp" && l.kelvin > 0) return kelvinColor(l.kelvin);
-		if (l.color) return Qt.hsla(l.hue / 360, 1, 1 - l.saturation / 200, 1);
+	function currentColorOf(light) {
+		if (!isOn || !light) return "#d0d0d0";
+		if (light.colorMode === "color_temp" && light.kelvin > 0) return kelvinColor(light.kelvin);
+		if (light.color) return Qt.hsla(light.hue / 360, 1, 1 - light.saturation / 200, 1);
 		return "#f5a623";
 	}
 
 	// roughly the colour of white light at this temperature: warm orange to cool blue-white
 	function kelvinColor(k) {
-		var t = Math.max(0, Math.min(1, (k - 2000) / 4500));
-		return Qt.rgba(1, 0.62 + 0.33 * t, 0.25 + 0.72 * t, 1);
+		var fraction = Math.max(0, Math.min(1, (k - 2000) / 4500));
+		return Qt.rgba(1, 0.62 + 0.33 * fraction, 0.25 + 0.72 * fraction, 1);
 	}
 
-	function sliderKelvin(v) { return minKelvin + v * (maxKelvin - minKelvin); }
+	function sliderKelvin(position) { return minKelvin + position * (maxKelvin - minKelvin); }
 
 	// ---- name, state, on/off ----
 	Image {

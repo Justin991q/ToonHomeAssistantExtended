@@ -46,11 +46,11 @@ Rectangle {
 	property variant buttonList: []
 	property string buttonKey: ""
 	function updateButtons() {
-		var b = buttons();
-		var k = JSON.stringify(b);
-		if (k === buttonKey) return;
-		buttonKey = k;
-		buttonList = b;
+		var list = buttons();
+		var key = JSON.stringify(list);
+		if (key === buttonKey) return;
+		buttonKey = key;
+		buttonList = list;
 	}
 	onRevChanged: updateButtons()
 	onEntityIdChanged: updateButtons()

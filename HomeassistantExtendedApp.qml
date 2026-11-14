@@ -131,7 +131,7 @@ App {
 	Component.onCompleted: {
 		loadSettings();
 		wsServer.listen = true;
-		try { appVersion = versionFile.read().trim(); } catch (e) {}
+		try { appVersion = versionFile.read().trim(); } catch (error) {}
 		publishWebPage();
 		openFirewallPort();
 		toonAddress = findToonAddress();
@@ -156,21 +156,21 @@ App {
 
 	function loadSettings() {
 		try {
-			var s = JSON.parse(settingsFile.read());
-			haUrl = s.url || "";
-			haToken = s.token || "";
-			if (s.pollSeconds >= 2) pollSeconds = s.pollSeconds;
-			entities = cleanEntities(s.entities || []);
-			sortMode = s.sortMode || "area";
-			favouritesOnly = s.favouritesOnly === true;
-			enableSystray = s.enableSystray === true;
-			areaOrder = s.areaOrder || [];
-			if (typeof s.defaultTab === "string") defaultTab = s.defaultTab;
-			tileEntities = cleanTile(s.tileEntities || []);
-			energy = cleanEnergy(s.energy || {});
-			if (s.mapTileUrl) mapTileUrl = s.mapTileUrl;
-			if (s.webPort > 0) webPort = s.webPort;
-		} catch (e) {
+			var saved = JSON.parse(settingsFile.read());
+			haUrl = saved.url || "";
+			haToken = saved.token || "";
+			if (saved.pollSeconds >= 2) pollSeconds = saved.pollSeconds;
+			entities = cleanEntities(saved.entities || []);
+			sortMode = saved.sortMode || "area";
+			favouritesOnly = saved.favouritesOnly === true;
+			enableSystray = saved.enableSystray === true;
+			areaOrder = saved.areaOrder || [];
+			if (typeof saved.defaultTab === "string") defaultTab = saved.defaultTab;
+			tileEntities = cleanTile(saved.tileEntities || []);
+			energy = cleanEnergy(saved.energy || {});
+			if (saved.mapTileUrl) mapTileUrl = saved.mapTileUrl;
+			if (saved.webPort > 0) webPort = saved.webPort;
+		} catch (error) {
 			// first start: nothing saved yet
 		}
 	}
@@ -195,11 +195,11 @@ App {
 
 	property variant energyKeys: ["power", "usage", "export", "solarPower", "solar", "gas", "water", "priceUsage", "priceExport", "priceGas", "priceWater"]
 
-	function cleanEnergy(e) {
+	function cleanEnergy(source) {
 		var out = {};
 		for (var i = 0; i < energyKeys.length; i++) {
 			var k = energyKeys[i];
-			var list = e[k] || [];
+			var list = source[k] || [];
 			if (typeof list === "string") list = list ? [list] : [];
 			var ids = [];
 			for (var j = 0; j < list.length; j++) if (list[j] && ids.indexOf(String(list[j])) < 0) ids.push(String(list[j]));
@@ -212,10 +212,10 @@ App {
 		var out = [];
 		var seen = {};
 		for (var i = 0; i < list.length; i++) {
-			var e = list[i];
-			if (!e || !e.id || seen[e.id]) continue;
-			seen[e.id] = true;
-			out.push({id: String(e.id), name: e.name ? String(e.name) : "", fav: e.fav === true});
+			var entity = list[i];
+			if (!entity || !entity.id || seen[entity.id]) continue;
+			seen[entity.id] = true;
+			out.push({id: String(entity.id), name: entity.name ? String(entity.name) : "", fav: entity.fav === true});
 		}
 		return out;
 	}
@@ -293,44 +293,44 @@ App {
 	}
 
 	function setSortMode(mode) { sortMode = mode; saveSettings(); selectionChanged(); }
-	function setFavouritesOnly(on) { favouritesOnly = on; saveSettings(); selectionChanged(); }
-	function setSystray(on) { enableSystray = on; saveSettings(); broadcastState(); }
+	function setFavouritesOnly(enabled) { favouritesOnly = enabled; saveSettings(); selectionChanged(); }
+	function setSystray(enabled) { enableSystray = enabled; saveSettings(); broadcastState(); }
 
 	// the name to show: your own, else HA's friendly name, else the entity id
 	function displayName(id) {
 		var i = indexOf(id);
 		if (i >= 0 && entities[i].name) return entities[i].name;
-		var s = haStates[id];
-		if (s && s.name) return s.name;
-		var e = allIndex[id];
-		return e && e.name ? e.name : id;
+		var entry = haStates[id];
+		if (entry && entry.name) return entry.name;
+		var entity = allIndex[id];
+		return entity && entity.name ? entity.name : id;
 	}
 
 	function areaOf(id) {
-		var s = haStates[id];
-		if (s && s.area) return s.area;
-		var e = allIndex[id];
-		return e ? e.area || "" : "";
+		var entry = haStates[id];
+		if (entry && entry.area) return entry.area;
+		var entity = allIndex[id];
+		return entity ? entity.area || "" : "";
 	}
 
 	// the chosen entities as the screen shows them: [{id, name, area, fav, section}] sorted by sortMode
 	function sortedEntities(onlyFavs, mode) {
 		var out = [];
 		for (var i = 0; i < entities.length; i++) {
-			var e = entities[i];
-			if (onlyFavs && !e.fav) continue;
-			var area = areaOf(e.id);
-			out.push({id: e.id, name: displayName(e.id), area: area, fav: e.fav, order: i,
-				section: mode === "area" ? (area || "Geen ruimte") : (mode === "name" ? displayName(e.id).charAt(0).toUpperCase() : "")});
+			var entity = entities[i];
+			if (onlyFavs && !entity.fav) continue;
+			var area = areaOf(entity.id);
+			out.push({id: entity.id, name: displayName(entity.id), area: area, fav: entity.fav, order: i,
+				section: mode === "area" ? (area || "Geen ruimte") : (mode === "name" ? displayName(entity.id).charAt(0).toUpperCase() : "")});
 		}
 		if (mode === "area") {
-			out.sort(function(a, b) {
-				var ra = areaRank(a.area), rb = areaRank(b.area);
-				if (ra !== rb) return ra - rb;
-				return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : (a.name.toLowerCase() > b.name.toLowerCase() ? 1 : 0);
+			out.sort(function(first, second) {
+				var rankFirst = areaRank(first.area), rankSecond = areaRank(second.area);
+				if (rankFirst !== rankSecond) return rankFirst - rankSecond;
+				return first.name.toLowerCase() < second.name.toLowerCase() ? -1 : (first.name.toLowerCase() > second.name.toLowerCase() ? 1 : 0);
 			});
 		} else if (mode === "name") {
-			out.sort(function(a, b) { return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : (a.name.toLowerCase() > b.name.toLowerCase() ? 1 : 0); });
+			out.sort(function(first, second) { return first.name.toLowerCase() < second.name.toLowerCase() ? -1 : (first.name.toLowerCase() > second.name.toLowerCase() ? 1 : 0); });
 		}
 		return out;
 	}
@@ -357,16 +357,16 @@ App {
 		var hasFav = false, hasNoArea = false, used = {};
 		for (var i = 0; i < entities.length; i++) {
 			if (entities[i].fav) hasFav = true;
-			var a = areaOf(entities[i].id);
-			if (a) used[a] = true; else hasNoArea = true;
+			var first = areaOf(entities[i].id);
+			if (first) used[first] = true; else hasNoArea = true;
 		}
 		if (hasFav) out.push({key: "*fav", label: "Favorieten"});
 		if (energyConfigured()) out.push({key: "*energy", label: "Energie"});
 		var areas = [];
 		for (var k in used) areas.push(k);
 		if (hasNoArea) areas.push("");                // Overig: last, unless you moved it
-		areas.sort(function(a, b) { return (areaRank(a) - areaRank(b)) || (a < b ? -1 : (a > b ? 1 : 0)); });
-		for (var r = 0; r < areas.length; r++) out.push({key: areas[r], label: areas[r] || "Overig"});
+		areas.sort(function(first, second) { return (areaRank(first) - areaRank(second)) || (first < second ? -1 : (first > second ? 1 : 0)); });
+		for (var index = 0; index < areas.length; index++) out.push({key: areas[index], label: areas[index] || "Overig"});
 		return out;
 	}
 
@@ -399,8 +399,8 @@ App {
 		var out = [];
 		if (key === "*energy") return out;
 		for (var i = 0; i < entities.length; i++) {
-			var e = entities[i];
-			if (key === "*fav" ? e.fav : areaOf(e.id) === key) out.push(e.id);
+			var entity = entities[i];
+			if (key === "*fav" ? entity.fav : areaOf(entity.id) === key) out.push(entity.id);
 		}
 		return out;
 	}
@@ -408,26 +408,26 @@ App {
 	// how many lights/switches are on in a tab: shown next to its name
 	function tabOnCount(key) {
 		var ids = tabEntities(key);
-		var n = 0;
-		for (var i = 0; i < ids.length; i++) if ((actionOf(ids[i]) === "toggle" || domainOf(ids[i]) === "fan") && isOn(ids[i])) n++;
-		return n;
+		var count = 0;
+		for (var i = 0; i < ids.length; i++) if ((actionOf(ids[i]) === "toggle" || domainOf(ids[i]) === "fan") && isOn(ids[i])) count++;
+		return count;
 	}
 
 	// the icon for an entity: drawables/icons/<name>.svg (-on.svg when on, -dim.svg dimmed)
 	function iconName(id) {
-		var d = domainOf(id);
+		var domain = domainOf(id);
 		var unit = haStates[id] ? haStates[id].unit : "";
 		var map = {light: "bulb", "switch": "plug", fan: "fan", cover: "blinds", lock: "lock", alarm_control_panel: "shield",
 			scene: "palette", script: "play", button: "button", input_button: "button", climate: "thermometer", water_heater: "flame",
 			media_player: "speaker", person: "person", device_tracker: "person", binary_sensor: "eye", input_boolean: "toggle",
 			automation: "bolt", vacuum: "robot", humidifier: "droplet", camera: "camera", weather: "sun"};
-		if (d === "climate" && attr(id, "hvac_action") === "heating") return "flame";
+		if (domain === "climate" && attr(id, "hvac_action") === "heating") return "flame";
 		// a motion sensor: someone moving, or the same crossed out (as mdi:motion-sensor / motion-sensor-off)
-		if (d === "binary_sensor" && deviceClass(id) === "motion") return haStates[id] && haStates[id].state === "on" ? "motion" : "motion-off";
+		if (domain === "binary_sensor" && deviceClass(id) === "motion") return haStates[id] && haStates[id].state === "on" ? "motion" : "motion-off";
 		// a door contact: open or closed (as mdi:door-open / door-closed)
-		if (d === "binary_sensor" && deviceClass(id) === "door") return haStates[id] && haStates[id].state === "on" ? "door-open" : "door-closed";
-		if (map[d]) return map[d];
-		if (d === "sensor" || d === "input_number" || d === "number") {
+		if (domain === "binary_sensor" && deviceClass(id) === "door") return haStates[id] && haStates[id].state === "on" ? "door-open" : "door-closed";
+		if (map[domain]) return map[domain];
+		if (domain === "sensor" || domain === "input_number" || domain === "number") {
 			if (unit === "°C" || unit === "°F") return "thermometer";
 			if (unit === "%") return "droplet";
 			if (unit === "W" || unit === "kW" || unit === "kWh" || unit === "Wh" || unit === "V" || unit === "A") return "bolt";
@@ -438,38 +438,38 @@ App {
 
 	// Home Assistant's device_class (motion, door, …): from the state, else from the list of all entities
 	function deviceClass(id) {
-		var c = attr(id, "device_class");
-		if (c) return c;
-		var e = allIndex[id];
-		return e ? e.deviceClass || "" : "";
+		var className = attr(id, "device_class");
+		if (className) return className;
+		var entity = allIndex[id];
+		return entity ? entity.deviceClass || "" : "";
 	}
 
 	function iconUrl(id, dim) {
-		var d = domainOf(id);
+		var domain = domainOf(id);
 		var variant = dim ? "-dim" : (isLit(id) ? "-on" : "");
-		if (!dim && (d === "person" || d === "device_tracker") && haStates[id] && haStates[id].state === "home") variant = "-ok";
+		if (!dim && (domain === "person" || domain === "device_tracker") && haStates[id] && haStates[id].state === "home") variant = "-ok";
 		return Qt.resolvedUrl("drawables/icons/" + iconName(id) + variant + ".svg");
 	}
 
 	// lit up (warm yellow): on, or a thermostat that is heating, a speaker that plays
 	function isLit(id) {
-		var d = domainOf(id);
-		var s = haStates[id] ? haStates[id].state : "";
-		if (d === "climate") {
-			var a = attr(id, "hvac_action");
-			return a ? ["heating", "cooling", "drying", "fan"].indexOf(a) >= 0 : (s !== "off" && s !== "" && s !== "unavailable");
+		var domain = domainOf(id);
+		var stateNow = haStates[id] ? haStates[id].state : "";
+		if (domain === "climate") {
+			var action = attr(id, "hvac_action");
+			return action ? ["heating", "cooling", "drying", "fan"].indexOf(action) >= 0 : (stateNow !== "off" && stateNow !== "" && stateNow !== "unavailable");
 		}
-		if (d === "humidifier" || d === "fan") return s === "on";
-		if (d === "binary_sensor") return s === "on";          // motion, a door open, …
-		if (d === "media_player") return s === "playing";
+		if (domain === "humidifier" || domain === "fan") return stateNow === "on";
+		if (domain === "binary_sensor") return stateNow === "on";          // motion, a door open, …
+		if (domain === "media_player") return stateNow === "playing";
 		return actionOf(id) === "toggle" && isOn(id);
 	}
 
 	// a picture of the entity from Home Assistant (a person's photo, album art), else ""
 	function pictureUrl(id) {
-		var p = attr(id, "entity_picture");
-		if (!p) return "";
-		return p.indexOf("://") > 0 ? p : haUrl + p;
+		var path = attr(id, "entity_picture");
+		if (!path) return "";
+		return path.indexOf("://") > 0 ? path : haUrl + path;
 	}
 
 	// how many grid cells a card takes: an alarm panel, a speaker, a camera and the weather are double cards
@@ -483,42 +483,42 @@ App {
 
 	// a sensor shows its value big: "21,4°"; a thermostat its room temperature; the rest a word
 	function isValueCard(id) {
-		var d = domainOf(id);
-		if (d === "climate") return typeof attr(id, "current_temperature") === "number";
-		if (d === "humidifier") return typeof attr(id, "current_humidity") === "number";
-		if (d !== "sensor" && d !== "input_number" && d !== "number") return false;
-		var s = haStates[id];
-		return s && /^-?\d+(\.\d+)?$/.test(s.state);
+		var domain = domainOf(id);
+		if (domain === "climate") return typeof attr(id, "current_temperature") === "number";
+		if (domain === "humidifier") return typeof attr(id, "current_humidity") === "number";
+		if (domain !== "sensor" && domain !== "input_number" && domain !== "number") return false;
+		var entry = haStates[id];
+		return entry && /^-?\d+(\.\d+)?$/.test(entry.state);
 	}
 
 	// the big text of a value card
 	function valueText(id) {
-		var d = domainOf(id);
-		if (d === "climate") return degrees(attr(id, "current_temperature"));
-		if (d === "humidifier") return Math.round(attr(id, "current_humidity")) + "%";
+		var domain = domainOf(id);
+		if (domain === "climate") return degrees(attr(id, "current_temperature"));
+		if (domain === "humidifier") return Math.round(attr(id, "current_humidity")) + "%";
 		return stateText(id);
 	}
 
 	// the small line under the name of a value card ("" = none)
 	function detailText(id) {
-		var d = domainOf(id);
-		var s = haStates[id] ? haStates[id].state : "";
-		if (d === "climate") {
-			if (s === "off") return "Uit";
-			var t = climateTargetText(id);
-			var a = hvacActionText(attr(id, "hvac_action"));
-			return (t ? "Naar " + t : hvacModeText(s)) + (a ? " · " + a : "");
+		var domain = domainOf(id);
+		var stateNow = haStates[id] ? haStates[id].state : "";
+		if (domain === "climate") {
+			if (stateNow === "off") return "Uit";
+			var targetText = climateTargetText(id);
+			var action = hvacActionText(attr(id, "hvac_action"));
+			return (targetText ? "Naar " + targetText : hvacModeText(stateNow)) + (action ? " · " + action : "");
 		}
-		if (d === "humidifier") {
-			if (s !== "on") return "Uit";
+		if (domain === "humidifier") {
+			if (stateNow !== "on") return "Uit";
 			return typeof attr(id, "humidity") === "number" ? "Naar " + Math.round(attr(id, "humidity")) + "%" : "Aan";
 		}
 		return "";
 	}
 
-	function degrees(v) {
-		if (typeof v !== "number") return "-";
-		return i18n.number(v, 1, i18n.omit_trail_zeros) + "°";
+	function degrees(value) {
+		if (typeof value !== "number") return "-";
+		return i18n.number(value, 1, i18n.omit_trail_zeros) + "°";
 	}
 
 	function friendlyError(err) {
@@ -581,7 +581,7 @@ App {
 	function template(tpl, onDone) {
 		request("POST", "/api/template", {template: tpl}, function(text, err) {
 			if (text === null) { onDone(null, err); return; }
-			try { onDone(JSON.parse(text), ""); } catch (e) { onDone(null, "onverwacht antwoord"); }
+			try { onDone(JSON.parse(text), ""); } catch (error) { onDone(null, "onverwacht antwoord"); }
 		});
 	}
 
@@ -594,7 +594,7 @@ App {
 			if (xhr.readyState !== 4) return;
 			if (xhr.status === 200) {
 				var msg = "OK";
-				try { msg = JSON.parse(xhr.responseText).message || "OK"; } catch (e) {}
+				try { msg = JSON.parse(xhr.responseText).message || "OK"; } catch (error) {}
 				onDone(true, msg);
 			} else if (xhr.status === 401) {
 				onDone(false, "Bereikbaar, maar het token klopt niet (401)");
@@ -607,7 +607,7 @@ App {
 		xhr.send();
 	}
 
-	function jsonString(s) { return JSON.stringify(String(s)); }
+	function jsonString(value) { return JSON.stringify(String(value)); }
 
 	// the states of the chosen entities, with HA's name and area, in one request
 	// the attributes fetched per domain (beyond the light and alarm ones): a list of values in this order
@@ -627,16 +627,16 @@ App {
 
 	// an extra attribute of an entity (see extKeys), undefined when not fetched
 	function attr(id, key) {
-		var s = haStates[id];
-		return s && s.attrs ? s.attrs[key] : undefined;
+		var entry = haStates[id];
+		return entry && entry.attrs ? entry.attrs[key] : undefined;
 	}
 
 	// the ids polled: the chosen entities and the Energie tab's
 	function pollIds() {
 		var out = [];
 		for (var i = 0; i < entities.length; i++) out.push(entities[i].id);
-		var e = energyIds();
-		for (var j = 0; j < e.length; j++) if (out.indexOf(e[j]) < 0) out.push(e[j]);
+		var energyList = energyIds();
+		for (var j = 0; j < energyList.length; j++) if (out.indexOf(energyList[j]) < 0) out.push(energyList[j]);
 		return out;
 	}
 
@@ -672,25 +672,25 @@ App {
 			}
 			// merged into what is there (what live updates brought in since stays), for the ids polled now
 			var keep = {}, wanted = pollIds();
-			for (var w0 = 0; w0 < wanted.length; w0++) keep[wanted[w0]] = true;
+			for (var index = 0; index < wanted.length; index++) keep[wanted[index]] = true;
 			var map = {};
-			for (var id0 in haStates) if (keep[id0]) map[id0] = haStates[id0];
+			for (var known in haStates) if (keep[known]) map[known] = haStates[known];
 			for (var j = 0; j < list.length; j++) {
-				var r = list[j];
-				if (!keep[r[0]]) continue;
-				var polled = {state: r[1], unit: r[2] || "", name: r[3] || "", area: r[4] || "",
-					codeFormat: r[5] || "", codeArmRequired: r[6] !== false, features: r[7] || 0, light: lightInfo(r[8]),
-					attrs: extAttrs(r[0], r[9]), changed: r[10] || 0};
-				if (liveConnected && liveRaw[r[0]] && map[r[0]]) {
+				var row = list[j];
+				if (!keep[row[0]]) continue;
+				var polled = {state: row[1], unit: row[2] || "", name: row[3] || "", area: row[4] || "",
+					codeFormat: row[5] || "", codeArmRequired: row[6] !== false, features: row[7] || 0, light: lightInfo(row[8]),
+					attrs: extAttrs(row[0], row[9]), changed: row[10] || 0};
+				if (liveConnected && liveRaw[row[0]] && map[row[0]]) {
 					// live is newer than a poll's answer: only the area (live doesn't send it)
-					map[r[0]] = copyState(map[r[0]], {area: polled.area});
+					map[row[0]] = copyState(map[row[0]], {area: polled.area});
 					continue;
 				}
-				map[r[0]] = polled;
-				applyHold(map, r[0]);
+				map[row[0]] = polled;
+				applyHold(map, row[0]);
 			}
 			var hadWeather = false;
-			for (var w in map) if (domainOf(w) === "weather" && !forecasts[w]) hadWeather = true;
+			for (var id in map) if (domainOf(id) === "weather" && !forecasts[id]) hadWeather = true;
 			haStates = map;
 			connected = true;
 			lastError = "";
@@ -747,7 +747,7 @@ App {
 
 	function liveSend(obj) {
 		if (haSocket.status !== WebSocket.Open) return;
-		try { haSocket.sendTextMessage(JSON.stringify(obj)); } catch (e) {}
+		try { haSocket.sendTextMessage(JSON.stringify(obj)); } catch (error) {}
 	}
 
 	// (again) subscribe to the chosen entities and the Energie tab's
@@ -764,70 +764,70 @@ App {
 	}
 
 	function liveMessage(text) {
-		var m;
-		try { m = JSON.parse(text); } catch (e) { return; }
-		if (m.type === "auth_required") {
+		var message;
+		try { message = JSON.parse(text); } catch (error) { return; }
+		if (message.type === "auth_required") {
 			liveSend({type: "auth", access_token: haToken});
-		} else if (m.type === "auth_ok") {
+		} else if (message.type === "auth_ok") {
 			liveRetry = 0;
 			liveConnected = true;
 			liveSubKey = "";
 			liveSubscribe();
-		} else if (m.type === "auth_invalid") {
+		} else if (message.type === "auth_invalid") {
 			lastError = "token ongeldig (401)";
 			liveStop();
 			liveReconnect.interval = 5 * 60 * 1000;
 			liveReconnect.restart();
-		} else if (m.type === "result" && m.id === liveSubId && !m.success) {
+		} else if (message.type === "result" && message.id === liveSubId && !message.success) {
 			// an older Home Assistant: no subscribe_entities. Polling it is
-			console.log("homeassistant: no live updates (" + (m.error ? m.error.message : "?") + "), polling");
+			console.log("homeassistant: no live updates (" + (message.error ? message.error.message : "?") + "), polling");
 			liveFailed = true;
 			liveStop();
-		} else if (m.type === "event" && m.id === liveSubId && m.event) {
-			applyLive(m.event);
+		} else if (message.type === "event" && message.id === liveSubId && message.event) {
+			applyLive(message.event);
 		}
 	}
 
 	// subscribe_entities sends {a: {id: {s, a, lc}}} (everything, at first), {c: {id: {"+": {s, a, lc}, "-": {a: [keys]}}}} (changes)
 	// and {r: [ids]} (removed)
-	function applyLive(ev) {
+	function applyLive(event) {
 		var raw = liveRaw;
 		var changed = [];
 		var id;
-		if (ev.a) {
-			for (id in ev.a) {
-				raw[id] = {s: ev.a[id].s, a: ev.a[id].a || {}, lc: ev.a[id].lc || 0};
+		if (event.a) {
+			for (id in event.a) {
+				raw[id] = {s: event.a[id].s, a: event.a[id].a || {}, lc: event.a[id].lc || 0};
 				changed.push(id);
 			}
 		}
-		if (ev.c) {
-			for (id in ev.c) {
-				var d = ev.c[id];
-				var r = raw[id] || {s: "", a: {}, lc: 0};
-				var plus = d["+"];
+		if (event.c) {
+			for (id in event.c) {
+				var change = event.c[id];
+				var entry = raw[id] || {s: "", a: {}, lc: 0};
+				var plus = change["+"];
 				if (plus) {
-					if (plus.s !== undefined) r.s = plus.s;
-					if (plus.lc !== undefined) r.lc = plus.lc;
-					if (plus.a) for (var k in plus.a) r.a[k] = plus.a[k];
+					if (plus.s !== undefined) entry.s = plus.s;
+					if (plus.lc !== undefined) entry.lc = plus.lc;
+					if (plus.a) for (var k in plus.a) entry.a[k] = plus.a[k];
 				}
-				var minus = d["-"];
-				if (minus && minus.a) for (var j = 0; j < minus.a.length; j++) delete r.a[minus.a[j]];
-				raw[id] = r;
+				var minus = change["-"];
+				if (minus && minus.a) for (var j = 0; j < minus.a.length; j++) delete entry.a[minus.a[j]];
+				raw[id] = entry;
 				changed.push(id);
 			}
 		}
-		if (ev.r) {
-			for (var q = 0; q < ev.r.length; q++) {
-				raw[ev.r[q]] = {s: "unavailable", a: raw[ev.r[q]] ? raw[ev.r[q]].a : {}, lc: 0};
-				changed.push(ev.r[q]);
+		if (event.r) {
+			for (var index = 0; index < event.r.length; index++) {
+				raw[event.r[index]] = {s: "unavailable", a: raw[event.r[index]] ? raw[event.r[index]].a : {}, lc: 0};
+				changed.push(event.r[index]);
 			}
 		}
 		liveRaw = raw;
 		if (changed.length === 0) return;
 		var map = haStates;
 		var newWeather = false, any = false;
-		for (var n = 0; n < changed.length; n++) {
-			id = changed[n];
+		for (var index = 0; index < changed.length; index++) {
+			id = changed[index];
 			var before = map[id] ? JSON.stringify(map[id]) : "";
 			map[id] = liveState(id, raw[id], map[id]);
 			applyHold(map, id);
@@ -844,18 +844,18 @@ App {
 	}
 
 	// Home Assistant's state and attributes -> what the cards read (the same as a poll gives)
-	function liveState(id, r, prev) {
-		var a = r.a || {};
-		var d = domainOf(id);
-		var keys = extKeys[d] || [];
+	function liveState(id, raw, prev) {
+		var attributes = raw.a || {};
+		var domain = domainOf(id);
+		var keys = extKeys[domain] || [];
 		var values = [];
-		for (var i = 0; i < keys.length; i++) values.push(a[keys[i]] === undefined ? null : a[keys[i]]);
+		for (var i = 0; i < keys.length; i++) values.push(attributes[keys[i]] === undefined ? null : attributes[keys[i]]);
 		var area = prev && prev.area ? prev.area : (allIndex[id] ? allIndex[id].area : "");
-		return {state: r.s, unit: a.unit_of_measurement || "", name: a.friendly_name || "", area: area || "",
-			codeFormat: a.code_format || "", codeArmRequired: a.code_arm_required !== false, features: a.supported_features || 0,
-			light: d === "light" ? lightInfo([a.brightness, a.supported_color_modes, a.hs_color, a.color_temp_kelvin,
-				a.min_color_temp_kelvin, a.max_color_temp_kelvin, a.color_mode]) : null,
-			attrs: extAttrs(id, values), changed: d === "person" || d === "device_tracker" ? r.lc || 0 : 0};
+		return {state: raw.s, unit: attributes.unit_of_measurement || "", name: attributes.friendly_name || "", area: area || "",
+			codeFormat: attributes.code_format || "", codeArmRequired: attributes.code_arm_required !== false, features: attributes.supported_features || 0,
+			light: domain === "light" ? lightInfo([attributes.brightness, attributes.supported_color_modes, attributes.hs_color, attributes.color_temp_kelvin,
+				attributes.min_color_temp_kelvin, attributes.max_color_temp_kelvin, attributes.color_mode]) : null,
+			attrs: extAttrs(id, values), changed: domain === "person" || domain === "device_tracker" ? raw.lc || 0 : 0};
 	}
 
 	WebSocket {
@@ -904,13 +904,13 @@ App {
 		request("POST", "/api/services/weather/get_forecasts?return_response", {entity_id: id, type: type}, function(text, err) {
 			var list = null;
 			try {
-				var f = JSON.parse(text).service_response[id].forecast;
+				var forecast = JSON.parse(text).service_response[id].forecast;
 				list = [];
-				for (var i = 0; i < f.length; i++) {
-					list.push({time: parseTime(f[i].datetime).getTime(), condition: f[i].condition || "", temp: f[i].temperature,
-						low: f[i].templow, rain: f[i].precipitation, daily: type === "daily"});
+				for (var i = 0; i < forecast.length; i++) {
+					list.push({time: parseTime(forecast[i].datetime).getTime(), condition: forecast[i].condition || "", temp: forecast[i].temperature,
+						low: forecast[i].templow, rain: forecast[i].precipitation, daily: type === "daily"});
 				}
-			} catch (e) {}
+			} catch (error) {}
 			if (list === null || list.length === 0) {
 				if (type === "daily") loadForecast(id, "hourly");
 				else if (!forecasts[id]) { var none = copyState(forecasts, {}); none[id] = []; forecasts = none; }
@@ -923,17 +923,17 @@ App {
 		});
 	}
 
-	function weatherConditionText(c) {
+	function weatherConditionText(condition) {
 		return {"clear-night": "Helder", cloudy: "Bewolkt", exceptional: "Waarschuwing", fog: "Mist", hail: "Hagel",
 			lightning: "Onweer", "lightning-rainy": "Onweer en regen", partlycloudy: "Half bewolkt", pouring: "Hevige regen",
 			rainy: "Regen", snowy: "Sneeuw", "snowy-rainy": "Natte sneeuw", sunny: "Zonnig", windy: "Winderig",
-			"windy-variant": "Winderig, bewolkt"}[c] || c;
+			"windy-variant": "Winderig, bewolkt"}[condition] || condition;
 	}
 
-	function weatherIconUrl(c) {
+	function weatherIconUrl(condition) {
 		var known = ["clear-night", "cloudy", "exceptional", "fog", "hail", "lightning", "lightning-rainy", "partlycloudy",
 			"pouring", "rainy", "snowy", "snowy-rainy", "sunny", "windy", "windy-variant"];
-		return Qt.resolvedUrl("drawables/icons/weather-" + (known.indexOf(c) >= 0 ? c : "cloudy") + ".svg");
+		return Qt.resolvedUrl("drawables/icons/weather-" + (known.indexOf(condition) >= 0 ? condition : "cloudy") + ".svg");
 	}
 
 	Timer {
@@ -980,8 +980,8 @@ App {
 
 	function energyConfigured() { return energyIds().length > 0; }
 
-	function setEnergy(e) {
-		energy = cleanEnergy(e || {});
+	function setEnergy(settings) {
+		energy = cleanEnergy(settings || {});
 		saveSettings();
 		energyHistory = {};
 		energyHistUntil = 0;
@@ -992,16 +992,16 @@ App {
 	}
 
 	function setEnergyField(key, ids) {
-		var e = copyState(energy, {});
-		e[key] = ids;
-		setEnergy(e);
+		var settings = copyState(energy, {});
+		settings[key] = ids;
+		setEnergy(settings);
 	}
 
-	function pad2(n) { return (n < 10 ? "0" : "") + n; }
+	function pad2(number) { return (number < 10 ? "0" : "") + number; }
 
 	// Home Assistant's times have microseconds ("…T10:00:00.123456+00:00"): the Toon's JavaScript wants at most 3 digits
-	function parseTime(s) {
-		return new Date(String(s || "").replace(/(\.\d{3})\d+/, "$1"));
+	function parseTime(text) {
+		return new Date(String(text || "").replace(/(\.\d{3})\d+/, "$1"));
 	}
 
 	// the readings since yesterday midnight (Home Assistant's history) -> per hour, for today and yesterday:
@@ -1035,10 +1035,10 @@ App {
 			+ "&filter_entity_id=" + ids.join(",") + "&minimal_response&no_attributes", null, function(text, err) {
 			if (text === null) return;
 			var res;
-			try { res = JSON.parse(text); } catch (e) { return; }
+			try { res = JSON.parse(text); } catch (error) { return; }
 			var map = full ? {} : copyState(energyHistory, {});
-			for (var r = 0; r < res.length; r++) {
-				var rows = res[r];
+			for (var index = 0; index < res.length; index++) {
+				var rows = res[index];
 				if (!rows || rows.length === 0 || !rows[0].entity_id) continue;
 				var id = rows[0].entity_id;
 				var isPrice = priceIds.indexOf(id) >= 0;
@@ -1057,16 +1057,16 @@ App {
 	function meterMore(hist, rows, midnight) {
 		var out = {today: hist.today.slice(0), yesterday: hist.yesterday, last: hist.last, day: hist.day};
 		for (var k = 0; k < rows.length; k++) {
-			var v = parseFloat(rows[k].state);
-			if (isNaN(v)) continue;
-			var t = parseTime(rows[k].last_changed || rows[k].last_updated);
+			var value = parseFloat(rows[k].state);
+			if (isNaN(value)) continue;
+			var time = parseTime(rows[k].last_changed || rows[k].last_updated);
 			if (out.last !== null) {
-				var inc = increment(out.last, v);
+				var inc = increment(out.last, value);
 				// the first row is the state at the start of the period, often from earlier: it counts in this hour
-				var hour = isNaN(t.getTime()) || t < midnight ? new Date().getHours() : t.getHours();
+				var hour = isNaN(time.getTime()) || time < midnight ? new Date().getHours() : time.getHours();
 				out.today[hour] += inc;
 			}
-			out.last = v;
+			out.last = value;
 		}
 		return out;
 	}
@@ -1075,30 +1075,30 @@ App {
 	function priceMore(hist, rows, midnight) {
 		var out = {today: hist.today.slice(0), yesterday: hist.yesterday, last: hist.last, day: hist.day, price: true};
 		for (var k = 0; k < rows.length; k++) {
-			var v = parseFloat(rows[k].state);
-			var t = parseTime(rows[k].last_changed || rows[k].last_updated);
-			if (isNaN(v) || isNaN(t.getTime()) || t < midnight) continue;
-			for (var h = t.getHours(); h < 24; h++) out.today[h] = v;
-			out.last = v;
+			var value = parseFloat(rows[k].state);
+			var time = parseTime(rows[k].last_changed || rows[k].last_updated);
+			if (isNaN(value) || isNaN(time.getTime()) || time < midnight) continue;
+			for (var hour = time.getHours(); hour < 24; hour++) out.today[hour] = value;
+			out.last = value;
 		}
 		return out;
 	}
 
-	function zeros() { var z = []; for (var h = 0; h < 24; h++) z.push(0); return z; }
+	function zeros() { var list = []; for (var hour = 0; hour < 24; hour++) list.push(0); return list; }
 
 	// a meter's readings -> its increments per hour, yesterday and today
 	function meterHistory(rows, yesterday, midnight, day) {
 		var out = {today: zeros(), yesterday: zeros(), last: null, day: day};
 		for (var k = 0; k < rows.length; k++) {
-			var v = parseFloat(rows[k].state);
-			if (isNaN(v)) continue;
-			var t = parseTime(rows[k].last_changed || rows[k].last_updated);
-			if (out.last !== null && !isNaN(t.getTime())) {
-				var inc = increment(out.last, v);
-				if (t >= midnight) out.today[t.getHours()] += inc;
-				else if (t >= yesterday) out.yesterday[t.getHours()] += inc;
+			var value = parseFloat(rows[k].state);
+			if (isNaN(value)) continue;
+			var time = parseTime(rows[k].last_changed || rows[k].last_updated);
+			if (out.last !== null && !isNaN(time.getTime())) {
+				var inc = increment(out.last, value);
+				if (time >= midnight) out.today[time.getHours()] += inc;
+				else if (time >= yesterday) out.yesterday[time.getHours()] += inc;
 			}
-			out.last = v;
+			out.last = value;
 		}
 		return out.last === null ? null : out;
 	}
@@ -1107,21 +1107,21 @@ App {
 	function priceHistory(rows, yesterday, midnight, day) {
 		var points = [];
 		for (var k = 0; k < rows.length; k++) {
-			var v = parseFloat(rows[k].state);
-			var t = parseTime(rows[k].last_changed || rows[k].last_updated);
-			if (!isNaN(v) && !isNaN(t.getTime())) points.push({t: t.getTime(), v: v});
+			var value = parseFloat(rows[k].state);
+			var time = parseTime(rows[k].last_changed || rows[k].last_updated);
+			if (!isNaN(value) && !isNaN(time.getTime())) points.push({t: time.getTime(), v: value});
 		}
 		if (points.length === 0) return null;
 		var out = {today: [], yesterday: [], last: points[points.length - 1].v, day: day, price: true};
-		for (var h = 0; h < 48; h++) {
-			var start = yesterday.getTime() + h * 3600 * 1000;
+		for (var hour = 0; hour < 48; hour++) {
+			var start = yesterday.getTime() + hour * 3600 * 1000;
 			var value = null;
-			for (var p = 0; p < points.length; p++) {
-				if (points[p].t <= start + 30 * 60 * 1000) value = points[p].v;      // the last change before half past
+			for (var index = 0; index < points.length; index++) {
+				if (points[index].t <= start + 30 * 60 * 1000) value = points[index].v;      // the last change before half past
 				else break;
 			}
 			if (value === null) value = points[0].v;
-			(h < 24 ? out.yesterday : out.today).push(value);
+			(hour < 24 ? out.yesterday : out.today).push(value);
 		}
 		return out;
 	}
@@ -1132,8 +1132,8 @@ App {
 	function loadPriceForecast(ids) {
 		var parts = [];
 		for (var i = 0; i < ids.length; i++) {
-			var q = jsonString(ids[i]);
-			parts.push(q + ": [state_attr(" + q + ", 'today'), state_attr(" + q + ", 'raw_today'), state_attr(" + q + ", 'prices_today'), state_attr(" + q + ", 'prices')]");
+			var quoted = jsonString(ids[i]);
+			parts.push(quoted + ": [state_attr(" + quoted + ", 'today'), state_attr(" + quoted + ", 'raw_today'), state_attr(" + quoted + ", 'prices_today'), state_attr(" + quoted + ", 'prices')]");
 		}
 		template("{# energy prices #}{{ {" + parts.join(", ") + "} | tojson }}", function(res, err) {
 			if (res === null) return;
@@ -1148,38 +1148,38 @@ App {
 	}
 
 	// the attributes -> 24 prices (an hour's average when they come per quarter), or null
-	function priceHours(a) {
-		if (!a) return null;
+	function priceHours(attributes) {
+		if (!attributes) return null;
 		var today = new Date().toDateString();
 		var sums = zeros(), counts = zeros(), any = false;
-		function add(h, v) { if (typeof v === "number" && h >= 0 && h < 24) { sums[h] += v; counts[h]++; any = true; } }
-		if (a[0] && a[0].length) {                       // today: [24] or [96]
-			var per = a[0].length >= 96 ? 4 : (a[0].length >= 48 ? 2 : 1);
-			for (var i = 0; i < a[0].length; i++) add(Math.floor(i / per), a[0][i]);
+		function add(hour, value) { if (typeof value === "number" && hour >= 0 && hour < 24) { sums[hour] += value; counts[hour]++; any = true; } }
+		if (attributes[0] && attributes[0].length) {                       // today: [24] or [96]
+			var per = attributes[0].length >= 96 ? 4 : (attributes[0].length >= 48 ? 2 : 1);
+			for (var i = 0; i < attributes[0].length; i++) add(Math.floor(i / per), attributes[0][i]);
 		} else {
-			var lists = [a[1], a[2], a[3]];
-			for (var l = 0; l < lists.length; l++) {
-				var list = lists[l];
+			var lists = [attributes[1], attributes[2], attributes[3]];
+			for (var index = 0; index < lists.length; index++) {
+				var list = lists[index];
 				if (!list || !list.length) continue;
 				for (var k = 0; k < list.length; k++) {
-					var e = list[k];
-					var t = parseTime(e.start || e.from || e.time || e.startsAt);
-					if (isNaN(t.getTime()) || t.toDateString() !== today) continue;
-					add(t.getHours(), typeof e.value === "number" ? e.value : (typeof e.price === "number" ? e.price : e.total));
+					var item = list[k];
+					var time = parseTime(item.start || item.from || item.time || item.startsAt);
+					if (isNaN(time.getTime()) || time.toDateString() !== today) continue;
+					add(time.getHours(), typeof item.value === "number" ? item.value : (typeof item.price === "number" ? item.price : item.total));
 				}
 				if (any) break;
 			}
 		}
 		if (!any) return null;
 		var out = [];
-		for (var h = 0; h < 24; h++) out.push(counts[h] ? sums[h] / counts[h] : null);
+		for (var hour = 0; hour < 24; hour++) out.push(counts[hour] ? sums[hour] / counts[hour] : null);
 		return out;
 	}
 
 	// a meter reading went from a to b: the use in between. A drop is a reset (a daily meter, a new meter)
-	function increment(a, b) {
-		if (b >= a) return b - a;
-		return b < a * 0.5 ? b : 0;      // a small dip is noise of the sensor
+	function increment(before, after) {
+		if (after >= before) return after - before;
+		return after < before * 0.5 ? after : 0;      // a small dip is noise of the sensor
 	}
 
 	// a reading in the unit the Energie tab shows: kWh, m³ for gas, litres for water, W for power
@@ -1204,10 +1204,10 @@ App {
 		var list = energy[key] || [];
 		var sum = 0, any = false;
 		for (var i = 0; i < list.length; i++) {
-			var s = haStates[list[i]];
-			var v = s ? parseFloat(s.state) : NaN;
-			if (isNaN(v)) continue;
-			sum += v * energyFactor(s.unit, key);
+			var entry = haStates[list[i]];
+			var value = entry ? parseFloat(entry.state) : NaN;
+			if (isNaN(value)) continue;
+			sum += value * energyFactor(entry.unit, key);
 			any = true;
 		}
 		return any ? sum : null;
@@ -1217,23 +1217,23 @@ App {
 	function energyToday(key) {
 		var list = energy[key] || [];
 		var hours = [], any = false;
-		for (var h = 0; h < 24; h++) hours.push(0);
+		for (var hour = 0; hour < 24; hour++) hours.push(0);
 		var nowHour = new Date().getHours();
 		var today = new Date().toDateString();
 		for (var i = 0; i < list.length; i++) {
 			var hist = energyHistory[list[i]];
 			if (!hist || hist.day !== today || hist.price) continue;
-			var s = haStates[list[i]];
-			var f = energyFactor(s ? s.unit : "", key);
-			for (var k = 0; k < 24; k++) hours[k] += hist.today[k] * f;
+			var entry = haStates[list[i]];
+			var factor = energyFactor(entry ? entry.unit : "", key);
+			for (var k = 0; k < 24; k++) hours[k] += hist.today[k] * factor;
 			// what the meter did since the history was fetched
-			var v = s ? parseFloat(s.state) : NaN;
-			if (!isNaN(v)) hours[nowHour] += increment(hist.last, v) * f;
+			var value = entry ? parseFloat(entry.state) : NaN;
+			if (!isNaN(value)) hours[nowHour] += increment(hist.last, value) * factor;
 			any = true;
 		}
 		if (!any) return null;
 		var total = 0;
-		for (var t = 0; t < 24; t++) total += hours[t];
+		for (var index = 0; index < 24; index++) total += hours[index];
 		return {total: total, hours: hours};
 	}
 
@@ -1245,17 +1245,17 @@ App {
 		for (var i = 0; i < list.length; i++) {
 			var hist = energyHistory[list[i]];
 			if (!hist || hist.day !== today || hist.price) continue;
-			var s = haStates[list[i]];
-			var f = energyFactor(s ? s.unit : "", key);
-			for (var k = 0; k < 24; k++) hours[k] += hist.yesterday[k] * f;
+			var entry = haStates[list[i]];
+			var factor = energyFactor(entry ? entry.unit : "", key);
+			for (var k = 0; k < 24; k++) hours[k] += hist.yesterday[k] * factor;
 			any = true;
 		}
 		if (!any) return null;
 		var now = new Date(), total = 0, same = 0;
-		for (var h = 0; h < 24; h++) {
-			total += hours[h];
-			if (h < now.getHours()) same += hours[h];
-			else if (h === now.getHours()) same += hours[h] * now.getMinutes() / 60;
+		for (var hour = 0; hour < 24; hour++) {
+			total += hours[hour];
+			if (hour < now.getHours()) same += hours[hour];
+			else if (hour === now.getHours()) same += hours[hour] * now.getMinutes() / 60;
 		}
 		return {total: total, hours: hours, sameTime: same};
 	}
@@ -1269,25 +1269,25 @@ App {
 		var today = new Date().toDateString(), nowHour = new Date().getHours();
 		for (var i = 0; i < list.length; i++) {
 			var id = list[i];
-			var s = haStates[id];
-			var f = priceFactor(s ? s.unit : "");
-			var now = s ? parseFloat(s.state) : NaN;
-			var fc = priceForecast[id], hist = energyHistory[id];
-			for (var h = 0; h < 24; h++) {
-				var v = null;
-				if (fc && typeof fc[h] === "number") v = fc[h];
-				else if (hist && hist.price && hist.day === today && h <= nowHour) v = hist.today[h];
-				if (h === nowHour && !isNaN(now) && !(fc && typeof fc[h] === "number")) v = now;
-				if (v === null && !isNaN(now)) v = now;             // a fixed tariff: the same all day
-				if (v !== null) { out[h] += v * f; any = true; }
+			var entry = haStates[id];
+			var factor = priceFactor(entry ? entry.unit : "");
+			var now = entry ? parseFloat(entry.state) : NaN;
+			var forecast = priceForecast[id], hist = energyHistory[id];
+			for (var hour = 0; hour < 24; hour++) {
+				var value = null;
+				if (forecast && typeof forecast[hour] === "number") value = forecast[hour];
+				else if (hist && hist.price && hist.day === today && hour <= nowHour) value = hist.today[hour];
+				if (hour === nowHour && !isNaN(now) && !(forecast && typeof forecast[hour] === "number")) value = now;
+				if (value === null && !isNaN(now)) value = now;             // a fixed tariff: the same all day
+				if (value !== null) { out[hour] += value * factor; any = true; }
 			}
 		}
 		return any ? out : null;
 	}
 
 	function priceNow(key) {
-		var p = priceToday(key);
-		return p ? p[new Date().getHours()] : null;
+		var prices = priceToday(key);
+		return prices ? prices[new Date().getHours()] : null;
 	}
 
 	function priceFactor(unit) {
@@ -1301,33 +1301,33 @@ App {
 		var cost = 0;
 		if (panel === "electricity") {
 			var use = energyToday("usage"), back = energyToday("export");
-			var pu = priceToday("priceUsage"), pe = priceToday("priceExport") || pu;
-			if (!pu || (!use && !back)) return null;
-			for (var h = 0; h < 24; h++) {
-				if (use) cost += use.hours[h] * pu[h];
-				if (back && pe) cost -= back.hours[h] * pe[h];
+			var priceUse = priceToday("priceUsage"), priceBack = priceToday("priceExport") || priceUse;
+			if (!priceUse || (!use && !back)) return null;
+			for (var hour = 0; hour < 24; hour++) {
+				if (use) cost += use.hours[hour] * priceUse[hour];
+				if (back && priceBack) cost -= back.hours[hour] * priceBack[hour];
 			}
 			return cost;
 		}
 		var key = panel === "gas" ? "gas" : "water";
-		var t = energyToday(key), p = priceToday(panel === "gas" ? "priceGas" : "priceWater");
-		if (!t || !p) return null;
+		var today = energyToday(key), prices = priceToday(panel === "gas" ? "priceGas" : "priceWater");
+		if (!today || !prices) return null;
 		var perUnit = key === "water" ? 0.001 : 1;         // water is in litres, its price per m³
-		for (var k = 0; k < 24; k++) cost += t.hours[k] * perUnit * p[k];
+		for (var k = 0; k < 24; k++) cost += today.hours[k] * perUnit * prices[k];
 		return cost;
 	}
 
-	function euro(v, digits) {
-		if (v === null || v === undefined) return "-";
-		return (v < 0 ? "− " : "") + "€ " + i18n.number(Math.abs(v), digits === undefined ? 2 : digits, 0);
+	function euro(value, digits) {
+		if (value === null || value === undefined) return "-";
+		return (value < 0 ? "− " : "") + "€ " + i18n.number(Math.abs(value), digits === undefined ? 2 : digits, 0);
 	}
 
-	function energyNumber(v, key) {
-		if (v === null || v === undefined) return "-";
+	function energyNumber(value, key) {
+		if (value === null || value === undefined) return "-";
 		var unit = energyUnit(key);
-		if (unit === "W" && Math.abs(v) >= 1000) return i18n.number(v / 1000, 2, i18n.omit_trail_zeros) + " kW";
-		var digits = unit === "W" || unit === "L" ? 0 : (Math.abs(v) >= 100 ? 0 : (Math.abs(v) >= 10 ? 1 : 2));
-		return i18n.number(v, digits, i18n.omit_trail_zeros) + " " + unit;
+		if (unit === "W" && Math.abs(value) >= 1000) return i18n.number(value / 1000, 2, i18n.omit_trail_zeros) + " kW";
+		var digits = unit === "W" || unit === "L" ? 0 : (Math.abs(value) >= 100 ? 0 : (Math.abs(value) >= 10 ? 1 : 2));
+		return i18n.number(value, digits, i18n.omit_trail_zeros) + " " + unit;
 	}
 
 	Timer {
@@ -1367,12 +1367,12 @@ App {
 	function setAllEntities(rows, areas, version) {
 		var list = [], index = {};
 		for (var i = 0; i < rows.length; i++) {
-			var r = rows[i];
-			var e = {id: r[0], name: r[1] || "", area: r[2] || "", state: r[3], domain: r[0].split(".")[0], unit: r[4] || "", deviceClass: r[5] || ""};
-			list.push(e);
-			index[e.id] = e;
+			var row = rows[i];
+			var entity = {id: row[0], name: row[1] || "", area: row[2] || "", state: row[3], domain: row[0].split(".")[0], unit: row[4] || "", deviceClass: row[5] || ""};
+			list.push(entity);
+			index[entity.id] = entity;
 		}
-		list.sort(function(a, b) { return a.id < b.id ? -1 : (a.id > b.id ? 1 : 0); });
+		list.sort(function(first, second) { return first.id < second.id ? -1 : (first.id > second.id ? 1 : 0); });
 		allIndex = index;
 		allEntities = list;
 		areaNames = areas;
@@ -1385,13 +1385,13 @@ App {
 	function saveEntitiesCache(rows) {
 		try {
 			entitiesCache.write(JSON.stringify({url: haUrl, time: allVersion, areas: areaNames, rows: rows}));
-		} catch (e) {}
+		} catch (error) {}
 	}
 
 	// forget the cached list (file and memory) and fetch it again from Home Assistant: e.g. after renaming
 	// or moving entities in Home Assistant. The web editor's copy goes too: its version no longer matches.
 	function clearEntitiesCache() {
-		try { entitiesCache.write(""); } catch (e) {}
+		try { entitiesCache.write(""); } catch (error) {}
 		allIndex = {};
 		allEntities = [];
 		allMessage = "";
@@ -1404,11 +1404,11 @@ App {
 	// the list from the last time (for this Home Assistant): the age in ms, or -1 when there is none
 	function loadEntitiesCache() {
 		try {
-			var c = JSON.parse(entitiesCache.read());
-			if (!c || c.url !== haUrl || !c.rows) return -1;
-			setAllEntities(c.rows, c.areas || [], c.time || 0);
-			return new Date().getTime() - (c.time || 0);
-		} catch (e) {
+			var cache = JSON.parse(entitiesCache.read());
+			if (!cache || cache.url !== haUrl || !cache.rows) return -1;
+			setAllEntities(cache.rows, cache.areas || [], cache.time || 0);
+			return new Date().getTime() - (cache.time || 0);
+		} catch (error) {
 			return -1;
 		}
 	}
@@ -1421,49 +1421,49 @@ App {
 
 	// what a tap on the entity does: "toggle", "press", "run" or "" (read only)
 	function actionOf(id) {
-		var d = domainOf(id);
-		if (["light", "switch", "input_boolean", "automation", "siren", "cover", "lock", "vacuum", "group"].indexOf(d) >= 0) return "toggle";
-		if (["fan", "climate", "humidifier", "media_player", "camera", "person", "device_tracker"].indexOf(d) >= 0) return "open";
-		if (d === "button" || d === "input_button") return "press";
-		if (d === "script" || d === "scene") return "run";
-		if (d === "alarm_control_panel") return "alarm";
+		var domain = domainOf(id);
+		if (["light", "switch", "input_boolean", "automation", "siren", "cover", "lock", "vacuum", "group"].indexOf(domain) >= 0) return "toggle";
+		if (["fan", "climate", "humidifier", "media_player", "camera", "person", "device_tracker"].indexOf(domain) >= 0) return "open";
+		if (domain === "button" || domain === "input_button") return "press";
+		if (domain === "script" || domain === "scene") return "run";
+		if (domain === "alarm_control_panel") return "alarm";
 		return "";
 	}
 
 	function isOn(id) {
-		var s = haStates[id] ? haStates[id].state : "";
-		return ["on", "open", "opening", "unlocked", "playing", "heat", "cool", "heat_cool", "auto", "cleaning", "home"].indexOf(s) >= 0;
+		var stateNow = haStates[id] ? haStates[id].state : "";
+		return ["on", "open", "opening", "unlocked", "playing", "heat", "cool", "heat_cool", "auto", "cleaning", "home"].indexOf(stateNow) >= 0;
 	}
 
 	function activate(id) {
-		var d = domainOf(id);
-		if (d === "alarm_control_panel") { openAlarm(id); return; }
+		var domain = domainOf(id);
+		if (domain === "alarm_control_panel") { openAlarm(id); return; }
 		if (actionOf(id) === "open") { openDetail(id); return; }
-		var on = isOn(id);
+		var wasOn = isOn(id);
 		var service = "";
-		if (d === "button" || d === "input_button") service = "press";
-		else if (d === "script" || d === "scene") service = "turn_on";
-		else if (d === "lock") service = on ? "lock" : "unlock";
-		else if (d === "cover") service = on ? "close_cover" : "open_cover";
-		else if (d === "vacuum") { service = on ? "turn_off" : "turn_on"; }
+		if (domain === "button" || domain === "input_button") service = "press";
+		else if (domain === "script" || domain === "scene") service = "turn_on";
+		else if (domain === "lock") service = wasOn ? "lock" : "unlock";
+		else if (domain === "cover") service = wasOn ? "close_cover" : "open_cover";
+		else if (domain === "vacuum") { service = wasOn ? "turn_off" : "turn_on"; }
 		// on or off as the card shows it, not "toggle": a lamp that is still fading out is "on" for Home Assistant,
 		// so off-and-at-once-on again would switch it off a second time
-		else if (actionOf(id) === "toggle") service = on ? "turn_off" : "turn_on";
+		else if (actionOf(id) === "toggle") service = wasOn ? "turn_off" : "turn_on";
 		if (!service) return;
-		if (d === "vacuum" && service === "turn_on") service = "start";
-		if (d === "vacuum" && service === "turn_off") service = "return_to_base";
+		if (domain === "vacuum" && service === "turn_on") service = "start";
+		if (domain === "vacuum" && service === "turn_off") service = "return_to_base";
 
 		// show the new state at once, HA's answer follows with the next poll
 		if (actionOf(id) === "toggle" && haStates[id]) {
 			var map = haStates;
-			var guess = {lock: on ? "locked" : "unlocked", cover: on ? "closing" : "opening"}[d] || (on ? "off" : "on");
+			var guess = {lock: wasOn ? "locked" : "unlocked", cover: wasOn ? "closing" : "opening"}[domain] || (wasOn ? "off" : "on");
 			var before = map[id].state;
 			map[id] = copyState(map[id], {state: guess});
 			haStates = map;
 			hold(id, before);
 			statesUpdated();
 		}
-		request("POST", "/api/services/" + d + "/" + service, {entity_id: id}, function(text, err) {
+		request("POST", "/api/services/" + domain + "/" + service, {entity_id: id}, function(text, err) {
 			if (text === null) { lastError = "Schakelen mislukt: " + err; release(id); }
 			actionResult(id, text !== null, text !== null ? "" : friendlyError(err));
 			refreshSoon.restart();
@@ -1471,81 +1471,81 @@ App {
 	}
 
 	function stateText(id) {
-		var s = haStates[id];
-		if (!s) return connected ? "?" : "";
-		var v = s.state;
-		if (v === "unavailable") return "n.b.";
-		if (v === "unknown") return "-";
-		var d = domainOf(id);
-		if (d === "script" || d === "scene" || d === "button" || d === "input_button") return "";
-		if (d === "alarm_control_panel") return alarmStateText(v);
-		if (d === "binary_sensor" && (v === "on" || v === "off")) {
-			var dc = deviceClass(id);
-			if (dc === "motion") return v === "on" ? "Beweging" : "Geen beweging";
-			if (dc === "door" || dc === "window" || dc === "opening" || dc === "garage_door") return v === "on" ? "Open" : "Dicht";
+		var entry = haStates[id];
+		if (!entry) return connected ? "?" : "";
+		var value = entry.state;
+		if (value === "unavailable") return "n.b.";
+		if (value === "unknown") return "-";
+		var domain = domainOf(id);
+		if (domain === "script" || domain === "scene" || domain === "button" || domain === "input_button") return "";
+		if (domain === "alarm_control_panel") return alarmStateText(value);
+		if (domain === "binary_sensor" && (value === "on" || value === "off")) {
+			var className = deviceClass(id);
+			if (className === "motion") return value === "on" ? "Beweging" : "Geen beweging";
+			if (className === "door" || className === "window" || className === "opening" || className === "garage_door") return value === "on" ? "Open" : "Dicht";
 		}
-		if (d === "climate") {
+		if (domain === "climate") {
 			var cur = attr(id, "current_temperature"), target = climateTargetText(id);
-			if (v === "off") return (typeof cur === "number" ? degrees(cur) + " · " : "") + "Uit";
-			return (typeof cur === "number" ? degrees(cur) : hvacModeText(v)) + (target ? " → " + target : "");
+			if (value === "off") return (typeof cur === "number" ? degrees(cur) + " · " : "") + "Uit";
+			return (typeof cur === "number" ? degrees(cur) : hvacModeText(value)) + (target ? " → " + target : "");
 		}
-		if (d === "humidifier") {
+		if (domain === "humidifier") {
 			var hum = attr(id, "current_humidity");
-			if (v !== "on") return (typeof hum === "number" ? Math.round(hum) + "% · " : "") + "Uit";
+			if (value !== "on") return (typeof hum === "number" ? Math.round(hum) + "% · " : "") + "Uit";
 			return (typeof hum === "number" ? Math.round(hum) + "%" : "Aan") + (typeof attr(id, "humidity") === "number" ? " → " + Math.round(attr(id, "humidity")) + "%" : "");
 		}
-		if (d === "weather") return (typeof attr(id, "temperature") === "number" ? degrees(attr(id, "temperature")) + " " : "") + weatherConditionText(v);
-		if (d === "media_player") {
-			if (v === "playing" || v === "paused") {
+		if (domain === "weather") return (typeof attr(id, "temperature") === "number" ? degrees(attr(id, "temperature")) + " " : "") + weatherConditionText(value);
+		if (domain === "media_player") {
+			if (value === "playing" || value === "paused") {
 				var title = attr(id, "media_title");
-				return (v === "paused" ? "Pauze" : "Speelt") + (title ? ": " + title : "");
+				return (value === "paused" ? "Pauze" : "Speelt") + (title ? ": " + title : "");
 			}
-			return {off: "Uit", on: "Aan", idle: "Inactief", standby: "Stand-by", buffering: "Laden…"}[v] || v;
+			return {off: "Uit", on: "Aan", idle: "Inactief", standby: "Stand-by", buffering: "Laden…"}[value] || value;
 		}
-		if (d === "camera") return {idle: "Inactief", recording: "Neemt op", streaming: "Live"}[v] || v;
-		if (d === "person" || d === "device_tracker") return v === "home" ? "Thuis" : (v === "not_home" ? "Weg" : v);
+		if (domain === "camera") return {idle: "Inactief", recording: "Neemt op", streaming: "Live"}[value] || value;
+		if (domain === "person" || domain === "device_tracker") return value === "home" ? "Thuis" : (value === "not_home" ? "Weg" : value);
 		var words = {on: "Aan", off: "Uit", open: "Open", closed: "Dicht", opening: "Gaat open", closing: "Gaat dicht",
 			locked: "Op slot", unlocked: "Open", home: "Thuis", not_home: "Weg", playing: "Speelt", paused: "Pauze",
 			idle: "Inactief", heat: "Verwarmen", cool: "Koelen", auto: "Auto", detected: "Gedetecteerd", clear: "Vrij"};
-		if (d === "light" && v === "on" && s.light && s.light.dimmable && s.light.brightness > 0) return "Aan " + lightPercent(id) + "%";
-		if (d === "fan" && v === "on") {
+		if (domain === "light" && value === "on" && entry.light && entry.light.dimmable && entry.light.brightness > 0) return "Aan " + lightPercent(id) + "%";
+		if (domain === "fan" && value === "on") {
 			var pct = attr(id, "percentage"), preset = attr(id, "preset_mode");
 			if (typeof pct === "number" && pct > 0 && fanSupports(id, "speed")) return "Aan " + Math.round(pct) + "%";
 			return preset ? "Aan · " + presetText(preset) : "Aan";
 		}
-		if (words[v] && s.unit === "") return words[v];
-		var n = parseFloat(v);
-		if (/^-?\d+(\.\d+)?$/.test(v)) {
-			var digits = Math.abs(n) >= 100 ? 0 : (Math.abs(n) >= 10 ? 1 : 2);
-			if (n === Math.round(n)) digits = 0;
-			return i18n.number(n, digits, i18n.omit_trail_zeros) + (s.unit ? " " + s.unit : "");
+		if (words[value] && entry.unit === "") return words[value];
+		var number = parseFloat(value);
+		if (/^-?\d+(\.\d+)?$/.test(value)) {
+			var digits = Math.abs(number) >= 100 ? 0 : (Math.abs(number) >= 10 ? 1 : 2);
+			if (number === Math.round(number)) digits = 0;
+			return i18n.number(number, digits, i18n.omit_trail_zeros) + (entry.unit ? " " + entry.unit : "");
 		}
-		return v + (s.unit ? " " + s.unit : "");
+		return value + (entry.unit ? " " + entry.unit : "");
 	}
 
 	// ======================================================================
 	// alarm panels (alarm_control_panel)
 	// ======================================================================
 
-	function alarmStateText(v) {
+	function alarmStateText(value) {
 		return {disarmed: "Uitgeschakeld", armed_home: "Aan (thuis)", armed_away: "Aan (afwezig)", armed_night: "Aan (nacht)",
 			armed_vacation: "Aan (vakantie)", armed_custom_bypass: "Aan (aangepast)", pending: "Vertraging…", arming: "Inschakelen…",
-			disarming: "Uitschakelen…", triggered: "ALARM!"}[v] || v;
+			disarming: "Uitschakelen…", triggered: "ALARM!"}[value] || value;
 	}
 
 	function isArmed(id) {
-		var s = haStates[id] ? haStates[id].state : "";
-		return s.indexOf("armed_") === 0 || s === "triggered" || s === "pending" || s === "arming";
+		var stateNow = haStates[id] ? haStates[id].state : "";
+		return stateNow.indexOf("armed_") === 0 || stateNow === "triggered" || stateNow === "pending" || stateNow === "arming";
 	}
 
 	// the modes the panel offers (HA's supported_features): [{mode, label}], always "disarm" last
 	function alarmModes(id) {
-		var f = haStates[id] ? haStates[id].features : 0;
+		var features = haStates[id] ? haStates[id].features : 0;
 		var all = [{bit: 2, mode: "arm_away", label: "Afwezig"}, {bit: 1, mode: "arm_home", label: "Thuis"},
 			{bit: 4, mode: "arm_night", label: "Nacht"}, {bit: 32, mode: "arm_vacation", label: "Vakantie"},
 			{bit: 16, mode: "arm_custom_bypass", label: "Aangepast"}];
 		var out = [];
-		for (var i = 0; i < all.length; i++) if (f & all[i].bit) out.push({mode: all[i].mode, label: all[i].label});
+		for (var i = 0; i < all.length; i++) if (features & all[i].bit) out.push({mode: all[i].mode, label: all[i].label});
 		if (out.length === 0) out.push({mode: "arm_away", label: "Afwezig"}, {mode: "arm_home", label: "Thuis"});   // features unknown
 		out.push({mode: "disarm", label: "Uitschakelen"});
 		return out;
@@ -1555,9 +1555,9 @@ App {
 	function alarmCodeFormat(id) { return haStates[id] ? haStates[id].codeFormat : ""; }
 
 	function alarmNeedsCode(id, mode) {
-		var s = haStates[id];
-		if (!s || !s.codeFormat) return false;
-		return mode === "disarm" || s.codeArmRequired;
+		var entry = haStates[id];
+		if (!entry || !entry.codeFormat) return false;
+		return mode === "disarm" || entry.codeArmRequired;
 	}
 
 	// mode: arm_away, arm_home, arm_night, arm_vacation, arm_custom_bypass or disarm; onDone(ok, message)
@@ -1590,57 +1590,57 @@ App {
 	property int holdMs: 6000
 
 	function hold(id, before) {
-		var h = holds;
-		var keep = h[id] && h[id].until > Date.now() ? h[id].before : before;    // quick taps: the state before the first
-		h[id] = {entry: haStates[id], before: keep, until: Date.now() + holdMs};
-		holds = h;
+		var list = holds;
+		var keep = list[id] && list[id].until > Date.now() ? list[id].before : before;    // quick taps: the state before the first
+		list[id] = {entry: haStates[id], before: keep, until: Date.now() + holdMs};
+		holds = list;
 	}
 
 	function release(id) {
-		var h = holds;
-		delete h[id];
-		holds = h;
+		var list = holds;
+		delete list[id];
+		holds = list;
 	}
 
 	// in a poll's answer: keep the held state while HA still reports the old one
 	function applyHold(map, id) {
-		var h = holds[id];
-		if (!h) return;
-		var ha = map[id].state, expected = h.entry ? h.entry.state : ha;
-		var done = Date.now() >= h.until || !h.entry
-			|| (expected !== h.before && (ha === expected || (["cover", "lock"].indexOf(domainOf(id)) >= 0 && ha !== h.before)));
+		var held = holds[id];
+		if (!held) return;
+		var haState = map[id].state, expected = held.entry ? held.entry.state : haState;
+		var done = Date.now() >= held.until || !held.entry
+			|| (expected !== held.before && (haState === expected || (["cover", "lock"].indexOf(domainOf(id)) >= 0 && haState !== held.before)));
 		// expected === before (a brightness or volume change, or off and on again): held until the time is up
 		if (done) release(id);
-		else map[id] = h.entry;
+		else map[id] = held.entry;
 	}
 
-	function copyState(s, changes) {
+	function copyState(source, changes) {
 		var out = {};
-		for (var k in s) out[k] = s[k];
-		for (var c in changes) out[c] = changes[c];
+		for (var k in source) out[k] = source[k];
+		for (var key in changes) out[key] = changes[key];
 		return out;
 	}
 
 	// HA's light attributes -> what the light screen needs; null for other domains
-	function lightInfo(a) {
-		if (!a) return null;
-		var modes = a[1] || [];
+	function lightInfo(attributes) {
+		if (!attributes) return null;
+		var modes = attributes[1] || [];
 		var colorModes = ["hs", "xy", "rgb", "rgbw", "rgbww"];
 		var color = false, dimmable = false;
 		for (var i = 0; i < modes.length; i++) {
 			if (colorModes.indexOf(modes[i]) >= 0) color = true;
 			if (modes[i] !== "onoff") dimmable = true;
 		}
-		return {brightness: a[0] || 0, dimmable: dimmable, color: color, colorTemp: modes.indexOf("color_temp") >= 0,
-			hue: a[2] ? a[2][0] : 0, saturation: a[2] ? a[2][1] : 0, kelvin: a[3] || 0,
-			minKelvin: a[4] || 2000, maxKelvin: a[5] || 6500, colorMode: a[6] || ""};
+		return {brightness: attributes[0] || 0, dimmable: dimmable, color: color, colorTemp: modes.indexOf("color_temp") >= 0,
+			hue: attributes[2] ? attributes[2][0] : 0, saturation: attributes[2] ? attributes[2][1] : 0, kelvin: attributes[3] || 0,
+			minKelvin: attributes[4] || 2000, maxKelvin: attributes[5] || 6500, colorMode: attributes[6] || ""};
 	}
 
 	function lightOf(id) { return haStates[id] ? haStates[id].light : null; }
 
 	function lightPercent(id) {
-		var l = lightOf(id);
-		return l ? Math.max(1, Math.round(l.brightness / 2.55)) : 0;
+		var light = lightOf(id);
+		return light ? Math.max(1, Math.round(light.brightness / 2.55)) : 0;
 	}
 
 	// a light change shown at once, before HA answers
@@ -1706,9 +1706,9 @@ App {
 
 	// the screen of a thermostat, humidifier, speaker, camera or person
 	function openDetail(id) {
-		var d = domainOf(id);
+		var domain = domainOf(id);
 		var url = {fan: fanScreenUrl, climate: climateScreenUrl, humidifier: climateScreenUrl, media_player: mediaScreenUrl, camera: cameraScreenUrl,
-			person: personScreenUrl, device_tracker: personScreenUrl}[d];
+			person: personScreenUrl, device_tracker: personScreenUrl}[domain];
 		if (url) stage.openFullscreen(url, {entityId: id});
 	}
 
@@ -1738,42 +1738,42 @@ App {
 		});
 	}
 
-	function hvacModeText(m) {
+	function hvacModeText(mode) {
 		return {off: "Uit", heat: "Verwarmen", cool: "Koelen", heat_cool: "Verwarmen/koelen", auto: "Automatisch",
-			dry: "Drogen", fan_only: "Ventileren"}[m] || m;
+			dry: "Drogen", fan_only: "Ventileren"}[mode] || mode;
 	}
 
-	function hvacActionText(a) {
+	function hvacActionText(action) {
 		return {heating: "verwarmt", cooling: "koelt", idle: "rust", drying: "droogt", fan: "ventileert", preheating: "voorverwarmen",
-			defrosting: "ontdooit"}[a] || "";
+			defrosting: "ontdooit"}[action] || "";
 	}
 
-	function presetText(p) {
+	function presetText(preset) {
 		return {none: "Geen", eco: "Eco", away: "Weg", boost: "Boost", comfort: "Comfort", home: "Thuis", sleep: "Slapen",
-			activity: "Actief", normal: "Normaal", baby: "Baby", auto: "Auto"}[p] || (p ? p.charAt(0).toUpperCase() + p.substring(1) : p);
+			activity: "Actief", normal: "Normaal", baby: "Baby", auto: "Auto"}[preset] || (preset ? preset.charAt(0).toUpperCase() + preset.substring(1) : preset);
 	}
 
 	// "20,5°", or "19°–23°" for a range (heat_cool); "" when the thermostat has no target
 	function climateTargetText(id) {
-		var t = attr(id, "temperature");
-		if (typeof t === "number") return degrees(t);
-		var lo = attr(id, "target_temp_low"), hi = attr(id, "target_temp_high");
-		if (typeof lo === "number" && typeof hi === "number") return degrees(lo) + "–" + degrees(hi);
+		var target = attr(id, "temperature");
+		if (typeof target === "number") return degrees(target);
+		var low = attr(id, "target_temp_low"), high = attr(id, "target_temp_high");
+		if (typeof low === "number" && typeof high === "number") return degrees(low) + "–" + degrees(high);
 		return "";
 	}
 
-	function climateSetTemperature(id, t) { service(id, "climate", "set_temperature", {temperature: t}, null, {temperature: t}); }
-	function climateSetRange(id, lo, hi) {
-		service(id, "climate", "set_temperature", {target_temp_low: lo, target_temp_high: hi}, null, {target_temp_low: lo, target_temp_high: hi});
+	function climateSetTemperature(id, temperature) { service(id, "climate", "set_temperature", {temperature: temperature}, null, {temperature: temperature}); }
+	function climateSetRange(id, low, high) {
+		service(id, "climate", "set_temperature", {target_temp_low: low, target_temp_high: high}, null, {target_temp_low: low, target_temp_high: high});
 	}
 	function climateSetMode(id, mode) { service(id, "climate", "set_hvac_mode", {hvac_mode: mode}, mode, null); }
 	function climateSetPreset(id, preset) { service(id, "climate", "set_preset_mode", {preset_mode: preset}, null, {preset_mode: preset}); }
 
 	// a fan's features (HA's supported_features bits)
 	function fanSupports(id, what) {
-		var f = haStates[id] ? haStates[id].features : 0;
+		var features = haStates[id] ? haStates[id].features : 0;
 		var bits = {speed: 1, oscillate: 2, direction: 4, preset: 8};
-		return (f & bits[what]) !== 0;
+		return (features & bits[what]) !== 0;
 	}
 	// more than on/off: the card gets the tune button, holding it opens the fan screen
 	function fanAdjustable(id) {
@@ -1781,30 +1781,30 @@ App {
 			|| (fanSupports(id, "preset") && (attr(id, "preset_modes") || []).length > 0));
 	}
 	function fanStep(id) {
-		var st = attr(id, "percentage_step");
-		return typeof st === "number" && st > 0 ? st : 10;
+		var step = attr(id, "percentage_step");
+		return typeof step === "number" && step > 0 ? step : 10;
 	}
 	// percent 0..100 (0 switches off), rounded to the fan's own steps
 	function fanSetPercentage(id, pct) {
-		var st = fanStep(id);
-		pct = Math.max(0, Math.min(100, Math.round(Math.round(pct / st) * st)));
+		var step = fanStep(id);
+		pct = Math.max(0, Math.min(100, Math.round(Math.round(pct / step) * step)));
 		service(id, "fan", "set_percentage", {percentage: pct}, pct > 0 ? "on" : "off", {percentage: pct});
 	}
-	function fanSetPreset(id, p) { service(id, "fan", "set_preset_mode", {preset_mode: p}, "on", {preset_mode: p}); }
-	function fanOscillate(id, on) { service(id, "fan", "oscillate", {oscillating: on}, null, {oscillating: on}); }
+	function fanSetPreset(id, preset) { service(id, "fan", "set_preset_mode", {preset_mode: preset}, "on", {preset_mode: preset}); }
+	function fanOscillate(id, oscillating) { service(id, "fan", "oscillate", {oscillating: oscillating}, null, {oscillating: oscillating}); }
 	function fanDirection(id, dir) { service(id, "fan", "set_direction", {direction: dir}, null, {direction: dir}); }
-	function fanPower(id, on) { service(id, "fan", on ? "turn_on" : "turn_off", {}, on ? "on" : "off", null); }
+	function fanPower(id, turnOn) { service(id, "fan", turnOn ? "turn_on" : "turn_off", {}, turnOn ? "on" : "off", null); }
 	function openFan(id) { stage.openFullscreen(fanScreenUrl, {entityId: id}); }
 
-	function humidifierSetHumidity(id, h) { service(id, "humidifier", "set_humidity", {humidity: h}, null, {humidity: h}); }
+	function humidifierSetHumidity(id, humidity) { service(id, "humidifier", "set_humidity", {humidity: humidity}, null, {humidity: humidity}); }
 	function humidifierSetMode(id, mode) { service(id, "humidifier", "set_mode", {mode: mode}, null, {mode: mode}); }
-	function humidifierPower(id, on) { service(id, "humidifier", on ? "turn_on" : "turn_off", {}, on ? "on" : "off", null); }
+	function humidifierPower(id, turnOn) { service(id, "humidifier", turnOn ? "turn_on" : "turn_off", {}, turnOn ? "on" : "off", null); }
 
 	// a speaker's features (HA's supported_features bits)
 	function mediaSupports(id, what) {
-		var f = haStates[id] ? haStates[id].features : 0;
+		var features = haStates[id] ? haStates[id].features : 0;
 		var bits = {pause: 1, volume: 4, mute: 8, previous: 16, next: 32, on: 128, off: 256, step: 1024, source: 2048, stop: 4096, play: 16384};
-		return (f & bits[what]) !== 0;
+		return (features & bits[what]) !== 0;
 	}
 
 	function mediaPlayPause(id) {
@@ -1813,24 +1813,24 @@ App {
 	}
 	function mediaNext(id) { service(id, "media_player", "media_next_track", {}, null, null); }
 	function mediaPrevious(id) { service(id, "media_player", "media_previous_track", {}, null, null); }
-	function mediaPower(id, on) { service(id, "media_player", on ? "turn_on" : "turn_off", {}, on ? "on" : "off", null); }
-	function mediaSetVolume(id, v) {
-		v = Math.round(Math.max(0, Math.min(1, v)) * 100) / 100;
-		service(id, "media_player", "volume_set", {volume_level: v}, null, {volume_level: v});
+	function mediaPower(id, turnOn) { service(id, "media_player", turnOn ? "turn_on" : "turn_off", {}, turnOn ? "on" : "off", null); }
+	function mediaSetVolume(id, volume) {
+		volume = Math.round(Math.max(0, Math.min(1, volume)) * 100) / 100;
+		service(id, "media_player", "volume_set", {volume_level: volume}, null, {volume_level: volume});
 	}
-	function mediaVolumeStep(id, up) {
-		var v = attr(id, "volume_level");
-		if (typeof v === "number" && mediaSupports(id, "volume")) mediaSetVolume(id, v + (up ? 0.05 : -0.05));
-		else service(id, "media_player", up ? "volume_up" : "volume_down", {}, null, null);
+	function mediaVolumeStep(id, louder) {
+		var volume = attr(id, "volume_level");
+		if (typeof volume === "number" && mediaSupports(id, "volume")) mediaSetVolume(id, volume + (louder ? 0.05 : -0.05));
+		else service(id, "media_player", louder ? "volume_up" : "volume_down", {}, null, null);
 	}
 	function mediaMute(id) {
-		var m = attr(id, "is_volume_muted") === true;
-		service(id, "media_player", "volume_mute", {is_volume_muted: !m}, null, {is_volume_muted: !m});
+		var muted = attr(id, "is_volume_muted") === true;
+		service(id, "media_player", "volume_mute", {is_volume_muted: !muted}, null, {is_volume_muted: !muted});
 	}
 	function mediaSource(id, source) { service(id, "media_player", "select_source", {source: source}, null, {source: source}); }
 	function mediaIsOff(id) {
-		var s = haStates[id] ? haStates[id].state : "";
-		return s === "off" || s === "standby" || s === "unavailable" || s === "";
+		var stateNow = haStates[id] ? haStates[id].state : "";
+		return stateNow === "off" || stateNow === "standby" || stateNow === "unavailable" || stateNow === "";
 	}
 
 	// a camera's still image: Home Assistant's camera proxy (entity_picture holds a token), with a new
@@ -1839,22 +1839,22 @@ App {
 	// animated: a moving picture (a rain radar): not fetched again every few seconds, only when Home
 	// Assistant gives a new token in entity_picture (about every 5 minutes), and it plays in between
 	function cameraUrl(id, animated) {
-		var p = attr(id, "entity_picture");
-		if (!p) return "";
-		if (animated) return haUrl + p;
-		return haUrl + p + (p.indexOf("?") >= 0 ? "&" : "?") + "t=" + cameraTick;
+		var path = attr(id, "entity_picture");
+		if (!path) return "";
+		if (animated) return haUrl + path;
+		return haUrl + path + (path.indexOf("?") >= 0 ? "&" : "?") + "t=" + cameraTick;
 	}
 
 	// "sinds 14:05" / "sinds gisteren" for a person's state
 	function sinceText(id) {
-		var c = haStates[id] ? haStates[id].changed : 0;
-		if (!c) return "";
-		var t = new Date(c * 1000), now = new Date();
-		var hm = pad2(t.getHours()) + ":" + pad2(t.getMinutes());
-		if (t.toDateString() === now.toDateString()) return "sinds " + hm;
-		var y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-		if (t.toDateString() === y.toDateString()) return "sinds gisteren " + hm;
-		return "sinds " + t.getDate() + "-" + (t.getMonth() + 1) + " " + hm;
+		var changed = haStates[id] ? haStates[id].changed : 0;
+		if (!changed) return "";
+		var time = new Date(changed * 1000), now = new Date();
+		var clock = pad2(time.getHours()) + ":" + pad2(time.getMinutes());
+		if (time.toDateString() === now.toDateString()) return "sinds " + clock;
+		var yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+		if (time.toDateString() === yesterday.toDateString()) return "sinds gisteren " + clock;
+		return "sinds " + time.getDate() + "-" + (time.getMonth() + 1) + " " + clock;
 	}
 
 	// mode: the button pressed on the alarm card when the panel needs a code (the screen asks for it)
@@ -1907,10 +1907,10 @@ App {
 			if (!page) return;
 			page = page.split("__WS_PORT__").join(String(webPort));
 			var old = "";
-			try { old = pageTarget.read(); } catch (e) {}
+			try { old = pageTarget.read(); } catch (error) {}
 			if (old !== page) pageTarget.write(page);
-		} catch (e) {
-			console.log("homeassistant: could not publish the web editor: " + e);
+		} catch (error) {
+			console.log("homeassistant: could not publish the web editor: " + error);
 		}
 	}
 
@@ -1920,11 +1920,11 @@ App {
 			var conf = iptablesFile.read();
 			if (!conf || conf.indexOf("--dport " + webPort + " ") >= 0) return;
 			var rule = "-A HCB-INPUT -p tcp -m tcp --dport " + webPort + " --tcp-flags SYN,RST,ACK SYN -j ACCEPT\n";
-			var at = conf.indexOf("-A HCB-INPUT -p tcp -m tcp --tcp-flags SYN,RST,ACK SYN -j DROP");
-			if (at < 0) return;
-			iptablesFile.write(conf.substring(0, at) + rule + conf.substring(at));
+			var position = conf.indexOf("-A HCB-INPUT -p tcp -m tcp --tcp-flags SYN,RST,ACK SYN -j DROP");
+			if (position < 0) return;
+			iptablesFile.write(conf.substring(0, position) + rule + conf.substring(position));
 			console.log("homeassistant: port " + webPort + " added to iptables.conf (active after \"Flush firewall rules\" or a reboot)");
-		} catch (e) {}
+		} catch (error) {}
 	}
 
 	// the Toon's own IP address: from the kernel's address list, else from a connection it has open
@@ -1932,12 +1932,12 @@ App {
 		// /proc/net/fib_trie: "|-- 192.168.1.23" followed by "/32 host LOCAL"
 		try {
 			var fib = fibFile.read().split("\n");
-			for (var f = 1; f < fib.length; f++) {
-				if (fib[f].indexOf("/32 host LOCAL") < 0) continue;
-				var m = fib[f - 1].match(/(\d+)\.(\d+)\.(\d+)\.(\d+)\s*$/);
-				if (m && m[1] !== "127" && m[1] !== "0") return m[1] + "." + m[2] + "." + m[3] + "." + m[4];
+			for (var line = 1; line < fib.length; line++) {
+				if (fib[line].indexOf("/32 host LOCAL") < 0) continue;
+				var match = fib[line - 1].match(/(\d+)\.(\d+)\.(\d+)\.(\d+)\s*$/);
+				if (match && match[1] !== "127" && match[1] !== "0") return match[1] + "." + match[2] + "." + match[3] + "." + match[4];
 			}
-		} catch (e1) {}
+		} catch (error) {}
 		try {
 			var lines = tcpFile.read().split("\n");
 			for (var i = 1; i < lines.length; i++) {
@@ -1945,11 +1945,11 @@ App {
 				if (parts.length < 4 || parts[3] !== "01") continue;      // established connections know our address
 				var hex = parts[1].split(":")[0];
 				if (hex.length !== 8) continue;
-				var ip = [parseInt(hex.substr(6, 2), 16), parseInt(hex.substr(4, 2), 16), parseInt(hex.substr(2, 2), 16), parseInt(hex.substr(0, 2), 16)];
-				if (ip[0] === 127 || ip[0] === 0) continue;
-				return ip.join(".");
+				var address = [parseInt(hex.substr(6, 2), 16), parseInt(hex.substr(4, 2), 16), parseInt(hex.substr(2, 2), 16), parseInt(hex.substr(0, 2), 16)];
+				if (address[0] === 127 || address[0] === 0) continue;
+				return address.join(".");
 			}
-		} catch (e) {}
+		} catch (error) {}
 		return "";
 	}
 
@@ -1988,7 +1988,7 @@ App {
 	function sendTo(socket, msg) {
 		try {
 			if (socket && socket.status === WebSocket.Open) { socket.sendTextMessage(msg); return true; }
-		} catch (e) {}
+		} catch (error) {}
 		return false;
 	}
 
@@ -2004,29 +2004,29 @@ App {
 	}
 
 	function handleMessage(socket, text) {
-		var m;
-		try { m = JSON.parse(text); } catch (e) { return; }
-		if (m.type === "get") {
+		var message;
+		try { message = JSON.parse(text); } catch (error) { return; }
+		if (message.type === "get") {
 			sendTo(socket, stateMessage());
-		} else if (m.type === "entities") {
+		} else if (message.type === "entities") {
 			// the page has a copy of this version (its browser keeps it): no need to send 100 kB again
-			if (m.version === allVersion && allVersion > 0) sendTo(socket, JSON.stringify({type: "entities", app: "homeassistantExtended", version: allVersion, same: true}));
+			if (message.version === allVersion && allVersion > 0) sendTo(socket, JSON.stringify({type: "entities", app: "homeassistantExtended", version: allVersion, same: true}));
 			else if (allMessage) sendTo(socket, allMessage);
-		} else if (m.type === "clearCache") {
+		} else if (message.type === "clearCache") {
 			clearEntitiesCache();
-		} else if (m.type === "refresh") {
+		} else if (message.type === "refresh") {
 			loadAllEntities();
 			sendTo(socket, stateMessage());
-		} else if (m.type === "test") {
-			testConnection(m.url || haUrl, m.token || haToken, function(ok, msg) {
+		} else if (message.type === "test") {
+			testConnection(message.url || haUrl, message.token || haToken, function(ok, msg) {
 				sendTo(socket, JSON.stringify({type: "test", ok: ok, message: msg}));
 			});
-		} else if (m.type === "connection") {
-			setConnection(m.url, m.token);
-		} else if (m.type === "save") {
+		} else if (message.type === "connection") {
+			setConnection(message.url, message.token);
+		} else if (message.type === "save") {
 			// answer first, then the work (saving, the screens): the page doesn't wait for the slow part
 			sendTo(socket, JSON.stringify({type: "saved"}));
-			pendingSave = m;
+			pendingSave = message;
 			saveLater.restart();
 		}
 	}
@@ -2036,21 +2036,21 @@ App {
 		id: saveLater
 		interval: 50
 		onTriggered: {
-			var m = pendingSave;
+			var save = pendingSave;
 			pendingSave = null;
-			if (!m) return;
-			if (m.sortMode) sortMode = m.sortMode;
-			if (m.systray !== undefined) enableSystray = m.systray === true;
-			if (m.areaOrder) areaOrder = m.areaOrder;
-			if (typeof m.defaultTab === "string") defaultTab = m.defaultTab;
-			if (m.tileEntities) tileEntities = cleanTile(m.tileEntities);
-			if (m.energy) {
-				energy = cleanEnergy(m.energy);
+			if (!save) return;
+			if (save.sortMode) sortMode = save.sortMode;
+			if (save.systray !== undefined) enableSystray = save.systray === true;
+			if (save.areaOrder) areaOrder = save.areaOrder;
+			if (typeof save.defaultTab === "string") defaultTab = save.defaultTab;
+			if (save.tileEntities) tileEntities = cleanTile(save.tileEntities);
+			if (save.energy) {
+				energy = cleanEnergy(save.energy);
 				energyHistory = {};
 				energyHistUntil = 0;
 				loadEnergyHistory();
 			}
-			setEntities(m.entities || []);
+			setEntities(save.entities || []);
 		}
 	}
 
