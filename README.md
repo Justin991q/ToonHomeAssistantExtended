@@ -144,8 +144,10 @@ In the web editor you can:
 - tick entities, or tick all entities of an area at once; filter by search, area and type;
 - see your chosen entities grouped per area; rename them, mark favourites and set their order within the
   area (▲▼, or sort by name or favourites first): that's the order of the cards on the Toon;
-- set the **order of the areas** (▲▼ next to an area's name): that's the order of the tabs on the Toon.
-  *Ruimtes zoals in Home Assistant* goes back to Home Assistant's order;
+- set the **order of the areas** (▲▼ next to an area's name, *Overig* too): that's the order of the tabs on
+  the Toon. *Ruimtes zoals in Home Assistant* goes back to Home Assistant's order (Overig last);
+- choose the tab the Toon **opens on** (*Op de Toon openen op*): the last one you used, Favorieten, Energie,
+  an area or Overig. On the Toon: *Openen op* on the settings screen (each tap the next choice);
 - choose the entities of the **Energie** tab (a list per part, only entities with a fitting unit);
 - turn the systray icon on or off.
 
@@ -224,7 +226,7 @@ can't send). For another map, put its tile address in the settings file as `"map
 | `screenshots/` | the pictures in this README (from the simulator, Toon 2) |
 
 Settings: `/mnt/data/tsc/homeassistantExtended.userSettings.json` (`url`, `token`, `entities: [{id, name, fav}]`,
-`areaOrder`, `energy: {power, usage, export, solarPower, solar, gas, water}` (lists of entity ids),
+`areaOrder` (`""` is Overig), `defaultTab`, `energy: {power, usage, export, solarPower, solar, gas, water}` (lists of entity ids),
 `enableSystray`, `pollSeconds`, `webPort`, `mapTileUrl`). The cached list of all entities:
 `/mnt/data/tsc/homeassistantExtended.entities.json`.
 

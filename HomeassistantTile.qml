@@ -9,7 +9,7 @@ Tile {
 	property int rowHeight: isNxt ? 32 : 26
 	property int maxRows: Math.max(1, Math.floor((height - listColumn.y - (isNxt ? 8 : 6)) / rowHeight))
 
-	onClicked: stage.openFullscreen(app.isConfigured() ? app.screenUrl : app.setupScreenUrl)
+	onClicked: app.openMain()
 
 	Component.onCompleted: {
 		app.statesUpdated.connect(update);

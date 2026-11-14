@@ -190,6 +190,10 @@ button:disabled { opacity: .45; cursor: default; }
 			<button id="areaReset" title="De ruimtes weer in de volgorde van Home Assistant">Ruimtes zoals in Home Assistant</button>
 			<button id="favFirst">Favorieten eerst</button>
 		</div>
+		<div class="row">
+			<label class="f" style="flex-direction:row;align-items:center;gap:8px;min-width:0">Op de Toon openen op
+				<select id="defaultTab" style="flex:1"></select></label>
+		</div>
 		<div class="list" id="selList"></div>
 	</section>
 
@@ -220,7 +224,8 @@ let chosen = [];           // working copy: [{id, name, fav}]
 let dirty = false;
 let pendingConnMsg = "";
 let failures = 0;
-let areaOrder = [];       // working copy of your area order
+let areaOrder = [];       // working copy of your area order ("" = Overig)
+let defaultTab = "*last"; // working copy: the tab the Toon opens on
 let view = null;          // phones: the part shown (chosen, add, energy, conn)
 let energy = {};          // working copy of the Energie tab's entities: {power: [ids], usage: [...], ...}
 
@@ -298,6 +303,7 @@ function onState(m) {
 	if (m.loading) $("allCount").textContent = "(ophalen…)";
 	if (!dirty) $("systray").checked = !!m.systray;
 	if (!dirty) areaOrder = (m.areaOrder || []).slice();
+	if (!dirty) defaultTab = typeof m.defaultTab === "string" ? m.defaultTab : "*last";
 	if (view === null) setView(!m.url || !m.hasToken ? "conn" : (m.entities.length ? "chosen" : "add"));   // the first message: where to start
 	if (!dirty) chosen = m.entities.map(e => ({id: e.id, name: e.name || "", fav: !!e.fav}));
 	if (!dirty) energy = JSON.parse(JSON.stringify(m.energy || {}));
@@ -309,7 +315,7 @@ function onState(m) {
 let byIdMap = {}, byIdOf = null;
 const byId = () => { if (byIdOf !== allList) { byIdMap = {}; allList.forEach(e => byIdMap[e.id] = e); byIdOf = allList; } return byIdMap; };   // made once per list
 const isChosen = (id) => chosen.some(c => c.id === id);
-const areaRank = (a) => { if (!a) return 1e6; const own = areaOrder.indexOf(a); if (own >= 0) return own; const i = server.areas.indexOf(a); return i >= 0 ? 1000 + i : 5e5; };
+const areaRank = (a) => { const own = areaOrder.indexOf(a || ""); if (own >= 0) return own; if (!a) return 1e6; const i = server.areas.indexOf(a); return i >= 0 ? 1000 + i : 5e5; };   // "" = Overig
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
 function markDirty() { dirty = true; updateSavebar(); }
 function updateSavebar() { $("savebar").classList.toggle("show", dirty); }
@@ -327,7 +333,19 @@ function fillFilters() {
 }
 
 // ---- rendering ----
-function render() { renderAll(); renderChosen(); renderEnergy(); }
+function render() { renderAll(); renderChosen(); renderEnergy(); renderDefaultTab(); }
+
+// the choices: "last one", Favorieten, Energie, the areas in your order, Overig (as the Toon's tabs, with this page's changes)
+function renderDefaultTab() {
+	if (!server) return;
+	const choices = [{key: "*last", label: "Laatst gekozen tabblad"}];
+	if (chosen.some(c => c.fav)) choices.push({key: "*fav", label: "Favorieten"});
+	if (Object.values(energy).some(l => l && l.length)) choices.push({key: "*energy", label: "Energie"});
+	chosenGroups().forEach(g => choices.push({key: g.area, label: g.area || "Overig"}));
+	if (!choices.some(c => c.key === defaultTab)) choices.push({key: defaultTab, label: (defaultTab || "Overig") + " (nu leeg)"});
+	$("defaultTab").innerHTML = choices.map(c => `<option value="${esc(c.key)}">${esc(c.label)}</option>`).join("");
+	$("defaultTab").value = defaultTab;
+}
 
 // the Energie tab: per part the chosen entities (chips) and a list to add one with a fitting unit
 function renderEnergy() {
@@ -386,12 +404,11 @@ function renderChosen() {
 	const all = byId();
 	$("selCount").textContent = `(${chosen.length}, ${chosen.filter(c => c.fav).length} favoriet)`;
 	$("tabChosen").textContent = chosen.length;
-	const groups = chosenGroups(), named = groups.filter(g => g.area);
-	$("selList").innerHTML = groups.map(g => {
-		const k = named.indexOf(g);
-		const moves = g.area ? `<span class="amove">
+	const groups = chosenGroups();
+	$("selList").innerHTML = groups.map((g, k) => {
+		const moves = `<span class="amove">
 			<button class="icon" data-amove="${k}:-1" ${k === 0 ? "disabled" : ""} title="Ruimte omhoog">▲</button>
-			<button class="icon" data-amove="${k}:1" ${k === named.length - 1 ? "disabled" : ""} title="Ruimte omlaag">▼</button></span>` : "";
+			<button class="icon" data-amove="${k}:1" ${k === groups.length - 1 ? "disabled" : ""} title="Ruimte omlaag">▼</button></span>`;
 		return `<div class="area"><span>${esc(g.area || "Overig")} <small style="cursor:default">${g.rows.length}</small></span>${moves}</div>` +
 		g.rows.map((i, n) => {
 			const c = chosen[i], e = all[c.id] || {};
@@ -431,7 +448,7 @@ $("selList").addEventListener("click", (ev) => {
 	if (t.dataset.amove) {
 		// a whole area up or down: the order of the tabs on the Toon
 		const [k, d] = t.dataset.amove.split(":").map(Number);
-		const names = chosenGroups().filter(g => g.area).map(g => g.area);
+		const names = chosenGroups().map(g => g.area);       // Overig ("") too
 		if (k + d < 0 || k + d >= names.length) return;
 		[names[k], names[k + d]] = [names[k + d], names[k]];
 		areaOrder = names.concat(areaOrder.filter(a => !names.includes(a)));
@@ -477,8 +494,9 @@ $("sortName").onclick = () => sortChosen((a, b) => nameOf(a).localeCompare(nameO
 $("favFirst").onclick = () => sortChosen((a, b) => (b.fav ? 1 : 0) - (a.fav ? 1 : 0));
 
 $("systray").addEventListener("change", markDirty);
+$("defaultTab").addEventListener("change", (ev) => { defaultTab = ev.target.value; markDirty(); });
 $("areaReset").onclick = () => { areaOrder = []; markDirty(); render(); };
-$("saveBtn").onclick = () => send({type: "save", systray: $("systray").checked, areaOrder: areaOrder, energy: energy, entities: chosen.map(c => ({id: c.id, name: c.name.trim(), fav: c.fav}))});
+$("saveBtn").onclick = () => send({type: "save", systray: $("systray").checked, areaOrder: areaOrder, defaultTab: defaultTab, energy: energy, entities: chosen.map(c => ({id: c.id, name: c.name.trim(), fav: c.fav}))});
 $("undoBtn").onclick = () => { dirty = false; updateSavebar(); onState(server); };
 $("clearCacheBtn").onclick = () => {
 	try { localStorage.removeItem(CACHE_KEY); } catch (e) {}

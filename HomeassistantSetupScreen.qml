@@ -119,6 +119,26 @@ Screen {
 		}
 		onClicked: test()
 	}
+
+	// the tab the main screen opens on: each tap the next choice
+	StandardButton {
+		id: defaultTabButton
+		property int rev: 0
+		text: "Openen op: " + (rev >= 0 ? app.defaultTabLabel() : "")
+		enabled: app.isConfigured()
+		anchors {
+			verticalCenter: testButton.verticalCenter
+			left: testButton.right
+			leftMargin: 16
+		}
+		onClicked: {
+			var list = app.defaultTabChoices();
+			var at = 0;
+			for (var i = 0; i < list.length; i++) if (list[i].key === app.defaultTab) at = i;
+			app.setDefaultTab(list[(at + 1) % list.length].key);
+			rev++;
+		}
+	}
 	Text {
 		anchors {
 			verticalCenter: testButton.verticalCenter

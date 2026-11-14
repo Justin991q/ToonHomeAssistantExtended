@@ -13,7 +13,7 @@ SystrayIcon {
 
 	property bool alarmTriggered: false
 
-	onClicked: stage.openFullscreen(app.isConfigured() ? app.screenUrl : app.setupScreenUrl)
+	onClicked: app.openMain()
 
 	Component.onCompleted: app.statesUpdated.connect(update)
 	Component.onDestruction: app.statesUpdated.disconnect(update)

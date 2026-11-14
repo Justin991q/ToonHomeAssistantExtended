@@ -6,6 +6,8 @@
   at once; the entity chooser opens much faster
 - Cache wissen: on the settings screen and in the web editor, forgets the cached entity list and fetches it again
 - Searching in the entity chooser: the keyboard's button says "Zoek"
+- Overig can be moved like the other areas (web editor)
+- The tab to open on: the last one, Favorieten, Energie, an area or Overig (settings screen, web editor)
 
 1.1.1
 - A lamp that fades out no longer jumps back to "Aan" for a moment after you switch it off: the new state

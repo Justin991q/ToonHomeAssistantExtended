@@ -65,7 +65,8 @@ App {
 	property string sortMode: "area"          // screen: "area", "name" or "own"
 	property bool favouritesOnly: false       // screen: only the favourites
 	property bool enableSystray: false        // the Home Assistant icon in the systray (top of the screen)
-	property variant areaOrder: []            // your order of the areas (web editor); areas not in it follow in HA's order
+	property variant areaOrder: []            // your order of the areas (web editor); areas not in it follow in HA's order. "" is Overig
+	property string defaultTab: "*last"       // the tab the main screen opens on: "*last" (the last one), "*fav", "*energy", an area, "" (Overig)
 	// the Energie tab: its own entities, apart from the cards. Every field is a list (summed: e.g. the
 	// two tariffs of a smart meter, or the three phases)
 	property variant energy: ({})             // {power, usage, export, solarPower, solar, gas, water}: [entity ids]
@@ -159,6 +160,7 @@ App {
 			favouritesOnly = s.favouritesOnly === true;
 			enableSystray = s.enableSystray === true;
 			areaOrder = s.areaOrder || [];
+			if (typeof s.defaultTab === "string") defaultTab = s.defaultTab;
 			energy = cleanEnergy(s.energy || {});
 			if (s.mapTileUrl) mapTileUrl = s.mapTileUrl;
 			if (s.webPort > 0) webPort = s.webPort;
@@ -177,6 +179,7 @@ App {
 			favouritesOnly: favouritesOnly,
 			enableSystray: enableSystray,
 			areaOrder: areaOrder,
+			defaultTab: defaultTab,
 			energy: energy,
 			mapTileUrl: mapTileUrl,
 			webPort: webPort
@@ -325,9 +328,9 @@ App {
 	// HA's area order, entities without an area last
 	// your order first (areaOrder), then HA's order, then areas HA's list does not have; no area last
 	function areaRank(area) {
+		var own = areaOrder.indexOf(area || "");
+		if (own >= 0) return own;                     // also Overig (""), when you moved it
 		if (!area) return 100000;
-		var own = areaOrder.indexOf(area);
-		if (own >= 0) return own;
 		var i = areaNames.indexOf(area);
 		return i >= 0 ? 1000 + i : 50000 + area.toLowerCase().charCodeAt(0);
 	}
@@ -351,10 +354,34 @@ App {
 		if (energyConfigured()) out.push({key: "*energy", label: "Energie"});
 		var areas = [];
 		for (var k in used) areas.push(k);
+		if (hasNoArea) areas.push("");                // Overig: last, unless you moved it
 		areas.sort(function(a, b) { return (areaRank(a) - areaRank(b)) || (a < b ? -1 : (a > b ? 1 : 0)); });
-		for (var r = 0; r < areas.length; r++) out.push({key: areas[r], label: areas[r]});
-		if (hasNoArea) out.push({key: "", label: "Overig"});
+		for (var r = 0; r < areas.length; r++) out.push({key: areas[r], label: areas[r] || "Overig"});
 		return out;
+	}
+
+	// the choices for the tab to open on: [{key, label}]
+	function defaultTabChoices() {
+		return [{key: "*last", label: "Laatst gekozen"}].concat(tabList());
+	}
+
+	function defaultTabLabel() {
+		var list = defaultTabChoices();
+		for (var i = 0; i < list.length; i++) if (list[i].key === defaultTab) return list[i].label;
+		return defaultTab === "" ? "Overig" : defaultTab;          // not there now (no entities in it): kept anyway
+	}
+
+	function setDefaultTab(key) {
+		defaultTab = key;
+		saveSettings();
+		broadcastState();
+	}
+
+	// the main screen from the tile or the systray: on your tab, or the last one
+	function openMain() {
+		if (!isConfigured()) { stage.openFullscreen(setupScreenUrl); return; }
+		if (defaultTab !== "*last") currentTab = defaultTab;
+		stage.openFullscreen(screenUrl);
 	}
 
 	// the entity ids of a tab, in your own order
@@ -1470,6 +1497,8 @@ App {
 			sortMode: sortMode,
 			systray: enableSystray,
 			areaOrder: areaOrder,
+			defaultTab: defaultTab,
+			tabs: defaultTabChoices(),
 			energy: energy,
 			energyFields: energyFields(),
 			entities: entities,
@@ -1536,6 +1565,7 @@ App {
 			if (m.sortMode) sortMode = m.sortMode;
 			if (m.systray !== undefined) enableSystray = m.systray === true;
 			if (m.areaOrder) areaOrder = m.areaOrder;
+			if (typeof m.defaultTab === "string") defaultTab = m.defaultTab;
 			if (m.energy) {
 				energy = cleanEnergy(m.energy);
 				energyHistory = {};
