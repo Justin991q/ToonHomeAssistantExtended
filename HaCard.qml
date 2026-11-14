@@ -10,7 +10,7 @@ Rectangle {
 	property bool pending: false
 
 	property string action: rev >= 0 ? app.actionOf(entityId) : ""
-	property bool lit: rev >= 0 && action === "toggle" && app.isOn(entityId)
+	property bool lit: rev >= 0 && app.isLit(entityId)
 	property bool adjustable: rev >= 0 && isAdjustable()
 	property bool valueCard: rev >= 0 && app.isValueCard(entityId)
 	property bool unavailable: rev >= 0 && app.haStates[entityId] !== undefined && app.haStates[entityId].state === "unavailable"
@@ -24,8 +24,15 @@ Rectangle {
 	opacity: unavailable ? 0.5 : 1
 
 	function isAdjustable() {
+		if (app.domainOf(entityId) === "fan") return app.fanAdjustable(entityId);
 		var l = app.lightOf(entityId);
 		return l !== null && l !== undefined && (l.dimmable || l.color || l.colorTemp);
+	}
+
+	// a light's or a fan's screen
+	function openSettings() {
+		if (app.domainOf(entityId) === "fan") app.openFan(entityId);
+		else app.openLight(entityId);
 	}
 
 	Connections {
@@ -61,15 +68,15 @@ Rectangle {
 		property bool held: false
 		onPressed: held = false
 		onPressAndHold: {
-			if (card.adjustable) { held = true; app.openLight(card.entityId); }
+			if (card.adjustable) { held = true; openSettings(); }
 		}
 		onClicked: {
 			if (held) return;
 			if (card.action === "") {
-				if (card.adjustable) app.openLight(card.entityId);
+				if (card.adjustable) openSettings();
 				return;
 			}
-			if (card.action !== "alarm") card.pending = true;
+			if (card.action !== "alarm" && card.action !== "open") card.pending = true;
 			app.activate(card.entityId);
 		}
 	}
@@ -86,6 +93,20 @@ Rectangle {
 			margins: isNxt ? 12 : 8
 		}
 		source: rev >= 0 ? app.iconUrl(entityId, false) : ""
+		visible: photo.status !== Image.Ready
+	}
+
+	// a person's photo from Home Assistant, in place of the icon
+	Image {
+		id: photo
+		width: isNxt ? 44 : 34
+		height: width
+		anchors { left: parent.left; top: parent.top; margins: isNxt ? 10 : 7 }
+		sourceSize.width: width * 2
+		fillMode: Image.PreserveAspectCrop
+		asynchronous: true
+		source: rev >= 0 ? app.pictureUrl(entityId) : ""
+		visible: status === Image.Ready
 	}
 
 	// a light's settings (brightness, colour): also by holding the card
@@ -112,7 +133,7 @@ Rectangle {
 		MouseArea {
 			anchors.fill: parent
 			anchors.margins: -6
-			onClicked: app.openLight(card.entityId)
+			onClicked: openSettings()
 		}
 	}
 
@@ -132,7 +153,7 @@ Rectangle {
 			font.family: qfont.bold.name
 			font.pixelSize: isNxt ? 28 : 22
 			color: "#1d1d1b"
-			text: rev >= 0 && card.valueCard ? app.stateText(entityId) : ""
+			text: rev >= 0 && card.valueCard ? app.valueText(entityId) : ""
 		}
 		Text {
 			width: parent.width
@@ -145,7 +166,7 @@ Rectangle {
 			text: rev >= 0 ? app.displayName(entityId) : ""
 		}
 		Text {
-			visible: !card.valueCard
+			visible: !card.valueCard || text !== ""
 			width: parent.width
 			elide: Text.ElideRight
 			font.family: qfont.regular.name
@@ -154,6 +175,7 @@ Rectangle {
 			text: rev >= 0 ? stateLine() : ""
 
 			function stateLine() {
+				if (card.valueCard) return app.detailText(entityId);
 				if (card.action === "run") return "Tik om te starten";
 				if (card.action === "press") return "Tik om in te drukken";
 				return app.stateText(entityId);

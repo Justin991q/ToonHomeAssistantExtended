@@ -180,10 +180,23 @@ Screen {
 		}
 		onClicked: stage.openFullscreen(app.entitiesScreenUrl)
 	}
-	Text {
+	// the Energie tab has entities of its own
+	StandardButton {
+		id: energyButton
+		text: app.energyConfigured() ? "Energie (" + app.energyIds().length + ")" : "Energie instellen"
+		enabled: app.isConfigured()
 		anchors {
 			verticalCenter: chooseButton.verticalCenter
 			left: chooseButton.right
+			leftMargin: 16
+		}
+		onClicked: stage.openFullscreen(app.energySetupScreenUrl)
+	}
+	Text {
+		visible: !app.isConfigured()
+		anchors {
+			verticalCenter: chooseButton.verticalCenter
+			left: energyButton.right
 			leftMargin: 16
 			right: introText.right
 		}
@@ -191,7 +204,7 @@ Screen {
 		font.family: qfont.regular.name
 		font.pixelSize: isNxt ? 15 : 12
 		color: colors.singleLabelLeftText
-		text: app.isConfigured() ? "Kies, hernoem en markeer favorieten op de Toon." : "Sla eerst adres en token op."
+		text: "Sla eerst adres en token op."
 	}
 
 	Text {

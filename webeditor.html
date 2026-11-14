@@ -28,7 +28,16 @@ main { max-width: 1280px; margin: 0 auto; padding: 16px; display: grid; gap: 16p
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
 .card h2 { font-size: 16px; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
 .card h2 .count { color: var(--muted); font-weight: normal; }
-#connection { grid-column: 1 / -1; }
+#connection, #energyCard { grid-column: 1 / -1; }
+.efields { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px 20px; }
+.efield { border-top: 1px solid var(--line); padding-top: 8px; min-width: 0; }
+.efield .lbl { font-weight: 600; font-size: 14px; }
+.efield .unit { color: var(--muted); font-size: 12px; font-weight: normal; }
+.efield .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.echip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 3px 4px 3px 10px; font-size: 13px; max-width: 100%; }
+.echip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.echip button { border: none; background: none; padding: 0 6px; }
+.efield select { width: 100%; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
 label.f { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); flex: 1; min-width: 220px; }
 input[type=text], input[type=password], input[type=search], select {
@@ -73,12 +82,14 @@ button:disabled { opacity: .45; cursor: default; }
 	header h1 { font-size: 16px; }
 	header h1 small { display: none; }
 	#tabs { display: flex; position: sticky; top: 0; z-index: 6; background: var(--card); border-bottom: 1px solid var(--line); }
-	#tabs button { flex: 1; border: none; border-radius: 0; background: none; padding: 12px 4px; min-height: 48px; font-size: 15px; color: var(--muted); border-bottom: 3px solid transparent; }
+	#tabs button { flex: 1; border: none; border-radius: 0; background: none; padding: 12px 2px; min-height: 48px; font-size: 14px; color: var(--muted); border-bottom: 3px solid transparent; }
 	#tabs button.on { color: var(--text); font-weight: 600; border-bottom-color: var(--accent); }
 	#tabs .badge { display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 4px; border-radius: 10px; background: var(--accent); color: #fff; font-size: 12px; line-height: 20px; }
 	main { grid-template-columns: 1fr; padding: 12px 12px 96px; gap: 12px; }
 	main > section { display: none; }
-	body[data-view="conn"] #connection, body[data-view="add"] #addCard, body[data-view="chosen"] #chosenCard { display: block; }
+	body[data-view="conn"] #connection, body[data-view="add"] #addCard, body[data-view="chosen"] #chosenCard, body[data-view="energy"] #energyCard { display: block; }
+	.efields { grid-template-columns: 1fr; }
+	.echip button { min-height: 32px; min-width: 32px; }
 	.card { padding: 14px 12px; border-radius: 12px; }
 	.card h2 { font-size: 17px; }
 	input[type=text], input[type=password], input[type=search], select { font-size: 16px; padding: 10px 12px; min-height: 44px; }   /* 16px: no zooming in on iOS */
@@ -129,6 +140,7 @@ button:disabled { opacity: .45; cursor: default; }
 <nav id="tabs">
 	<button data-view="chosen">Gekozen<span class="badge" id="tabChosen">0</span></button>
 	<button data-view="add">Toevoegen</button>
+	<button data-view="energy">Energie</button>
 	<button data-view="conn">Verbinding</button>
 </nav>
 <div id="fwHint" class="hint" hidden>Geen verbinding met de app op de Toon (WebSocket-poort <span id="fwPort"></span>). Druk op de Toon op <b>Instellingen &gt; TSC &gt; Flush firewall rules</b>, dan maakt deze pagina vanzelf verbinding. Een herstart van de Toon is niet nodig.</div>
@@ -177,6 +189,13 @@ button:disabled { opacity: .45; cursor: default; }
 		<div class="list" id="selList"></div>
 	</section>
 
+	<section class="card" id="energyCard">
+		<h2>Energie</h2>
+		<p style="margin:0 0 10px;font-size:13px;color:var(--muted)">Het tabblad Energie op de Toon, los van de kaarten. Kies per onderdeel een of meer entiteiten (meer = opgeteld, bijvoorbeeld de twee tarieven van een slimme meter).
+			Bij een meterstand rekent de Toon zelf het verbruik van vandaag uit, uit de geschiedenis van Home Assistant.</p>
+		<div class="efields" id="efields"></div>
+	</section>
+
 	<div id="savebar">
 		<span class="msg">Niet opgeslagen</span>
 		<button id="undoBtn">Ongedaan</button>
@@ -198,7 +217,8 @@ let dirty = false;
 let pendingConnMsg = "";
 let failures = 0;
 let areaOrder = [];       // working copy of your area order
-let view = null;          // phones: the part shown (chosen, add, conn)
+let view = null;          // phones: the part shown (chosen, add, energy, conn)
+let energy = {};          // working copy of the Energie tab's entities: {power: [ids], usage: [...], ...}
 
 function setView(v) {
 	view = v;
@@ -251,6 +271,7 @@ function onState(m) {
 	if (!dirty) areaOrder = (m.areaOrder || []).slice();
 	if (view === null) setView(!m.url || !m.hasToken ? "conn" : (m.entities.length ? "chosen" : "add"));   // the first message: where to start
 	if (!dirty) chosen = m.entities.map(e => ({id: e.id, name: e.name || "", fav: !!e.fav}));
+	if (!dirty) energy = JSON.parse(JSON.stringify(m.energy || {}));
 	fillFilters();
 	render();
 }
@@ -276,7 +297,24 @@ function fillFilters() {
 }
 
 // ---- rendering ----
-function render() { renderAll(); renderChosen(); }
+function render() { renderAll(); renderChosen(); renderEnergy(); }
+
+// the Energie tab: per part the chosen entities (chips) and a list to add one with a fitting unit
+function renderEnergy() {
+	if (!server || !server.energyFields) return;
+	const all = byId();
+	$("efields").innerHTML = server.energyFields.map(f => {
+		const ids = energy[f.key] || [];
+		const chips = ids.map(id => `<span class="echip" title="${esc(id)}"><span>${esc((all[id] || {}).name || id)}</span>
+			<button data-eremove="${esc(f.key)}|${esc(id)}" title="Weghalen">✕</button></span>`).join("");
+		const options = server.all.filter(e => f.units.includes(e.unit) && !ids.includes(e.id))
+			.sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id))
+			.map(e => `<option value="${esc(e.id)}">${esc(e.name || e.id)} (${esc(e.state)} ${esc(e.unit)})</option>`).join("");
+		return `<div class="efield"><div class="lbl">${esc(f.label)} <span class="unit">${esc(f.units.join(", "))}</span></div>
+			<div class="chips">${chips || '<span style="color:var(--muted);font-size:13px">niet ingesteld</span>'}</div>
+			<select data-eadd="${esc(f.key)}"><option value="">${options ? "+ toevoegen…" : "geen entiteiten met deze eenheid"}</option>${options}</select></div>`;
+	}).join("");
+}
 
 function renderAll() {
 	if (!server) return;
@@ -389,6 +427,19 @@ $("selList").addEventListener("input", (ev) => {
 	markDirty();
 });
 ["search", "areaSel", "domainSel", "onlySel"].forEach(id => $(id).addEventListener("input", renderAll));
+$("efields").addEventListener("change", (ev) => {
+	const key = ev.target.dataset.eadd;
+	if (!key || !ev.target.value) return;
+	energy[key] = (energy[key] || []).concat([ev.target.value]);
+	markDirty(); renderEnergy();
+});
+$("efields").addEventListener("click", (ev) => {
+	const t = ev.target.closest("button");
+	if (!t || !t.dataset.eremove) return;
+	const [key, id] = t.dataset.eremove.split("|");
+	energy[key] = (energy[key] || []).filter(x => x !== id);
+	markDirty(); renderEnergy();
+});
 
 function sortChosen(fn) { chosen.sort(fn); markDirty(); renderChosen(); }
 const nameOf = (c) => (c.name || (byId()[c.id] || {}).name || c.id).toLowerCase();
@@ -397,7 +448,7 @@ $("favFirst").onclick = () => sortChosen((a, b) => (b.fav ? 1 : 0) - (a.fav ? 1 
 
 $("systray").addEventListener("change", markDirty);
 $("areaReset").onclick = () => { areaOrder = []; markDirty(); render(); };
-$("saveBtn").onclick = () => send({type: "save", systray: $("systray").checked, areaOrder: areaOrder, entities: chosen.map(c => ({id: c.id, name: c.name.trim(), fav: c.fav}))});
+$("saveBtn").onclick = () => send({type: "save", systray: $("systray").checked, areaOrder: areaOrder, energy: energy, entities: chosen.map(c => ({id: c.id, name: c.name.trim(), fav: c.fav}))});
 $("undoBtn").onclick = () => { dirty = false; updateSavebar(); onState(server); };
 $("refreshBtn").onclick = () => { $("allCount").textContent = "(ophalen…)"; send({type: "refresh"}); };
 $("testBtn").onclick = () => { setConnMsg("testen…"); send({type: "test", url: $("url").value.trim(), token: $("token").value.trim()}); };

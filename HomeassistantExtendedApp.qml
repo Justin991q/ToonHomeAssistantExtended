@@ -34,6 +34,18 @@ App {
 	property url alarmScreenUrl: "HomeassistantAlarmScreen.qml"
 	property HomeassistantLightScreen homeassistantLightScreen
 	property url lightScreenUrl: "HomeassistantLightScreen.qml"
+	property HomeassistantFanScreen homeassistantFanScreen
+	property url fanScreenUrl: "HomeassistantFanScreen.qml"
+	property HomeassistantClimateScreen homeassistantClimateScreen
+	property url climateScreenUrl: "HomeassistantClimateScreen.qml"
+	property HomeassistantMediaScreen homeassistantMediaScreen
+	property url mediaScreenUrl: "HomeassistantMediaScreen.qml"
+	property HomeassistantCameraScreen homeassistantCameraScreen
+	property url cameraScreenUrl: "HomeassistantCameraScreen.qml"
+	property HomeassistantPersonScreen homeassistantPersonScreen
+	property url personScreenUrl: "HomeassistantPersonScreen.qml"
+	property HomeassistantEnergySetupScreen homeassistantEnergySetupScreen
+	property url energySetupScreenUrl: "HomeassistantEnergySetupScreen.qml"
 
 	property HomeassistantScreen homeassistantScreen
 	property url screenUrl: "HomeassistantScreen.qml"
@@ -54,6 +66,12 @@ App {
 	property bool favouritesOnly: false       // screen: only the favourites
 	property bool enableSystray: false        // the Home Assistant icon in the systray (top of the screen)
 	property variant areaOrder: []            // your order of the areas (web editor); areas not in it follow in HA's order
+	// the Energie tab: its own entities, apart from the cards. Every field is a list (summed: e.g. the
+	// two tariffs of a smart meter, or the three phases)
+	property variant energy: ({})             // {power, usage, export, solarPower, solar, gas, water}: [entity ids]
+	// the person screen's map: {z}, {x}, {y} are filled in. OpenStreetMap's own tile servers and CARTO refuse
+	// a client like the Toon (no API key, no own User-Agent); Esri's street map answers
+	property string mapTileUrl: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
 
 	// ---- live data ----
 	property variant haStates: ({})             // entity id -> {state, unit, name (HA's), area}
@@ -90,6 +108,12 @@ App {
 		registry.registerWidget("screen", entitiesScreenUrl, this, "homeassistantEntitiesScreen");
 		registry.registerWidget("screen", alarmScreenUrl, this, "homeassistantAlarmScreen");
 		registry.registerWidget("screen", lightScreenUrl, this, "homeassistantLightScreen");
+		registry.registerWidget("screen", climateScreenUrl, this, "homeassistantClimateScreen");
+		registry.registerWidget("screen", fanScreenUrl, this, "homeassistantFanScreen");
+		registry.registerWidget("screen", mediaScreenUrl, this, "homeassistantMediaScreen");
+		registry.registerWidget("screen", cameraScreenUrl, this, "homeassistantCameraScreen");
+		registry.registerWidget("screen", personScreenUrl, this, "homeassistantPersonScreen");
+		registry.registerWidget("screen", energySetupScreenUrl, this, "homeassistantEnergySetupScreen");
 		registry.registerWidget("systrayIcon", trayUrl, this, "homeassistantTray");
 	}
 
@@ -103,6 +127,7 @@ App {
 		if (isConfigured()) {
 			pollStates();
 			loadAllEntities();
+			loadEnergyHistory();
 		}
 	}
 
@@ -121,6 +146,8 @@ App {
 			favouritesOnly = s.favouritesOnly === true;
 			enableSystray = s.enableSystray === true;
 			areaOrder = s.areaOrder || [];
+			energy = cleanEnergy(s.energy || {});
+			if (s.mapTileUrl) mapTileUrl = s.mapTileUrl;
 			if (s.webPort > 0) webPort = s.webPort;
 		} catch (e) {
 			// first start: nothing saved yet
@@ -137,8 +164,25 @@ App {
 			favouritesOnly: favouritesOnly,
 			enableSystray: enableSystray,
 			areaOrder: areaOrder,
+			energy: energy,
+			mapTileUrl: mapTileUrl,
 			webPort: webPort
 		}, null, 1));
+	}
+
+	property variant energyKeys: ["power", "usage", "export", "solarPower", "solar", "gas", "water"]
+
+	function cleanEnergy(e) {
+		var out = {};
+		for (var i = 0; i < energyKeys.length; i++) {
+			var k = energyKeys[i];
+			var list = e[k] || [];
+			if (typeof list === "string") list = list ? [list] : [];
+			var ids = [];
+			for (var j = 0; j < list.length; j++) if (list[j] && ids.indexOf(String(list[j])) < 0) ids.push(String(list[j]));
+			out[k] = ids;
+		}
+		return out;
 	}
 
 	function cleanEntities(list) {
@@ -291,6 +335,7 @@ App {
 			if (a) used[a] = true; else hasNoArea = true;
 		}
 		if (hasFav) out.push({key: "*fav", label: "Favorieten"});
+		if (energyConfigured()) out.push({key: "*energy", label: "Energie"});
 		var areas = [];
 		for (var k in used) areas.push(k);
 		areas.sort(function(a, b) { return (areaRank(a) - areaRank(b)) || (a < b ? -1 : (a > b ? 1 : 0)); });
@@ -302,6 +347,7 @@ App {
 	// the entity ids of a tab, in your own order
 	function tabEntities(key) {
 		var out = [];
+		if (key === "*energy") return out;
 		for (var i = 0; i < entities.length; i++) {
 			var e = entities[i];
 			if (key === "*fav" ? e.fav : areaOf(e.id) === key) out.push(e.id);
@@ -322,9 +368,10 @@ App {
 		var d = domainOf(id);
 		var unit = haStates[id] ? haStates[id].unit : "";
 		var map = {light: "bulb", "switch": "plug", fan: "fan", cover: "blinds", lock: "lock", alarm_control_panel: "shield",
-			scene: "play", script: "play", button: "button", input_button: "button", climate: "flame", water_heater: "flame",
+			scene: "play", script: "play", button: "button", input_button: "button", climate: "thermometer", water_heater: "flame",
 			media_player: "speaker", person: "person", device_tracker: "person", binary_sensor: "eye", input_boolean: "toggle",
-			automation: "bolt", vacuum: "robot", humidifier: "droplet"};
+			automation: "bolt", vacuum: "robot", humidifier: "droplet", camera: "camera", weather: "sun"};
+		if (d === "climate" && attr(id, "hvac_action") === "heating") return "flame";
 		if (map[d]) return map[d];
 		if (d === "sensor" || d === "input_number" || d === "number") {
 			if (unit === "°C" || unit === "°F") return "thermometer";
@@ -336,18 +383,79 @@ App {
 	}
 
 	function iconUrl(id, dim) {
-		return Qt.resolvedUrl("drawables/icons/" + iconName(id) + (dim ? "-dim" : (actionOf(id) === "toggle" && isOn(id) ? "-on" : "")) + ".svg");
+		var d = domainOf(id);
+		var variant = dim ? "-dim" : (isLit(id) ? "-on" : "");
+		if (!dim && (d === "person" || d === "device_tracker") && haStates[id] && haStates[id].state === "home") variant = "-ok";
+		return Qt.resolvedUrl("drawables/icons/" + iconName(id) + variant + ".svg");
 	}
 
-	// how many grid cells a card takes: an alarm panel is a double card (state and its buttons)
-	function cardSlots(id) { return domainOf(id) === "alarm_control_panel" ? 2 : 1; }
+	// lit up (warm yellow): on, or a thermostat that is heating, a speaker that plays
+	function isLit(id) {
+		var d = domainOf(id);
+		var s = haStates[id] ? haStates[id].state : "";
+		if (d === "climate") {
+			var a = attr(id, "hvac_action");
+			return a ? ["heating", "cooling", "drying", "fan"].indexOf(a) >= 0 : (s !== "off" && s !== "" && s !== "unavailable");
+		}
+		if (d === "humidifier") return s === "on";
+		if (d === "media_player") return s === "playing";
+		return actionOf(id) === "toggle" && isOn(id);
+	}
 
-	// a sensor shows its value big: "21,4°"; the rest a word
+	// a picture of the entity from Home Assistant (a person's photo, album art), else ""
+	function pictureUrl(id) {
+		var p = attr(id, "entity_picture");
+		if (!p) return "";
+		return p.indexOf("://") > 0 ? p : haUrl + p;
+	}
+
+	// how many grid cells a card takes: an alarm panel, a speaker, a camera and the weather are double cards
+	function cardSlots(id) { return ["alarm_control_panel", "media_player", "camera", "weather"].indexOf(domainOf(id)) >= 0 ? 2 : 1; }
+
+	// the QML file of an entity's card
+	function cardFile(id) {
+		return {alarm_control_panel: "HaAlarmCard.qml", media_player: "HaMediaCard.qml", camera: "HaCameraCard.qml",
+			weather: "HaWeatherCard.qml"}[domainOf(id)] || "HaCard.qml";
+	}
+
+	// a sensor shows its value big: "21,4°"; a thermostat its room temperature; the rest a word
 	function isValueCard(id) {
 		var d = domainOf(id);
+		if (d === "climate") return typeof attr(id, "current_temperature") === "number";
+		if (d === "humidifier") return typeof attr(id, "current_humidity") === "number";
 		if (d !== "sensor" && d !== "input_number" && d !== "number") return false;
 		var s = haStates[id];
 		return s && /^-?\d+(\.\d+)?$/.test(s.state);
+	}
+
+	// the big text of a value card
+	function valueText(id) {
+		var d = domainOf(id);
+		if (d === "climate") return degrees(attr(id, "current_temperature"));
+		if (d === "humidifier") return Math.round(attr(id, "current_humidity")) + "%";
+		return stateText(id);
+	}
+
+	// the small line under the name of a value card ("" = none)
+	function detailText(id) {
+		var d = domainOf(id);
+		var s = haStates[id] ? haStates[id].state : "";
+		if (d === "climate") {
+			if (s === "off") return "Uit";
+			var t = climateTargetText(id);
+			var a = hvacActionText(attr(id, "hvac_action"));
+			return (t ? "Naar " + t : hvacModeText(s)) + (a ? " · " + a : "");
+		}
+		if (d === "humidifier") {
+			if (s !== "on") return "Uit";
+			return typeof attr(id, "humidity") === "number" ? "Naar " + Math.round(attr(id, "humidity")) + "%" : "Aan";
+		}
+		return "";
+	}
+
+	function degrees(v) {
+		if (typeof v !== "number") return "-";
+		return i18n.number(v, 1, i18n.omit_trail_zeros) + "°";
 	}
 
 	function friendlyError(err) {
@@ -416,14 +524,47 @@ App {
 	function jsonString(s) { return JSON.stringify(String(s)); }
 
 	// the states of the chosen entities, with HA's name and area, in one request
+	// the attributes fetched per domain (beyond the light and alarm ones): a list of values in this order
+	property variant extKeys: ({
+		climate: ["current_temperature", "temperature", "target_temp_low", "target_temp_high", "hvac_action", "hvac_modes",
+			"min_temp", "max_temp", "target_temp_step", "preset_mode", "preset_modes", "current_humidity"],
+		humidifier: ["current_humidity", "humidity", "min_humidity", "max_humidity", "mode", "available_modes", "action"],
+		weather: ["temperature", "temperature_unit", "humidity", "wind_speed", "wind_speed_unit", "wind_bearing"],
+		media_player: ["media_title", "media_artist", "media_album_name", "app_name", "volume_level", "is_volume_muted",
+			"entity_picture", "source", "source_list"],
+		camera: ["entity_picture"],
+		fan: ["percentage", "percentage_step", "preset_mode", "preset_modes", "oscillating", "direction"],
+		person: ["latitude", "longitude", "gps_accuracy", "entity_picture"],
+		device_tracker: ["latitude", "longitude", "gps_accuracy", "entity_picture"]
+	})
+
+	// an extra attribute of an entity (see extKeys), undefined when not fetched
+	function attr(id, key) {
+		var s = haStates[id];
+		return s && s.attrs ? s.attrs[key] : undefined;
+	}
+
+	// the ids polled: the chosen entities and the Energie tab's
+	function pollIds() {
+		var out = [];
+		for (var i = 0; i < entities.length; i++) out.push(entities[i].id);
+		var e = energyIds();
+		for (var j = 0; j < e.length; j++) if (out.indexOf(e[j]) < 0) out.push(e[j]);
+		return out;
+	}
+
 	function pollStates() {
-		if (!isConfigured() || entities.length === 0) return;
+		var list = pollIds();
+		if (!isConfigured() || list.length === 0) return;
 		var ids = [];
-		for (var i = 0; i < entities.length; i++) ids.push(jsonString(entities[i].id));
-		var tpl = "[{%- for i in [" + ids.join(",") + "] -%}"
+		for (var i = 0; i < list.length; i++) ids.push(jsonString(list[i]));
+		var tpl = "{%- set ext = " + JSON.stringify(extKeys) + " -%}"
+			+ "[{%- for i in [" + ids.join(",") + "] -%}"
+			+ "{%- set ns = namespace(v=[]) -%}{%- for k in ext.get(i.split('.')[0], []) -%}{%- set ns.v = ns.v + [state_attr(i, k)] -%}{%- endfor -%}"
 			+ "{{ [i, states(i), state_attr(i, 'unit_of_measurement'), state_attr(i, 'friendly_name'), area_name(i), state_attr(i, 'code_format'), state_attr(i, 'code_arm_required'), state_attr(i, 'supported_features'), "
 			+ "([state_attr(i, 'brightness'), state_attr(i, 'supported_color_modes'), state_attr(i, 'hs_color'), state_attr(i, 'color_temp_kelvin'), "
-			+ "state_attr(i, 'min_color_temp_kelvin'), state_attr(i, 'max_color_temp_kelvin'), state_attr(i, 'color_mode')] if i.startswith('light.') else none)] | tojson }}"
+			+ "state_attr(i, 'min_color_temp_kelvin'), state_attr(i, 'max_color_temp_kelvin'), state_attr(i, 'color_mode')] if i.startswith('light.') else none), "
+			+ "ns.v, (as_timestamp(states[i].last_changed) if i.split('.')[0] in ['person', 'device_tracker'] and states[i] else none)] | tojson }}"
 			+ "{%- if not loop.last %},{% endif -%}{%- endfor -%}]";
 		template(tpl, function(list, err) {
 			if (list === null) {
@@ -436,16 +577,257 @@ App {
 			for (var j = 0; j < list.length; j++) {
 				var r = list[j];
 				map[r[0]] = {state: r[1], unit: r[2] || "", name: r[3] || "", area: r[4] || "",
-					codeFormat: r[5] || "", codeArmRequired: r[6] !== false, features: r[7] || 0, light: lightInfo(r[8])};
+					codeFormat: r[5] || "", codeArmRequired: r[6] !== false, features: r[7] || 0, light: lightInfo(r[8]),
+					attrs: extAttrs(r[0], r[9]), changed: r[10] || 0};
 			}
+			var hadWeather = false;
+			for (var w in map) if (domainOf(w) === "weather" && !forecasts[w]) hadWeather = true;
 			haStates = map;
 			connected = true;
 			lastError = "";
+			cameraTick++;
 			var now = new Date();
 			if (!toonAddress) toonAddress = findToonAddress();   // the Toon may have had no address or connection at the start
 			lastUpdate = ("0" + now.getHours()).slice(-2) + ":" + ("0" + now.getMinutes()).slice(-2) + ":" + ("0" + now.getSeconds()).slice(-2);
 			statesUpdated();
+			if (hadWeather) loadForecasts();
 		});
+	}
+
+	// the extra attribute values (a list in extKeys order) -> {key: value}
+	function extAttrs(id, values) {
+		var keys = extKeys[domainOf(id)];
+		if (!keys || !values) return {};
+		var out = {};
+		for (var i = 0; i < keys.length && i < values.length; i++) out[keys[i]] = values[i];
+		return out;
+	}
+
+	// ======================================================================
+	// weather: the forecast (weather.get_forecasts, every 30 minutes)
+	// ======================================================================
+
+	property variant forecasts: ({})          // weather entity id -> [{time (ms), condition, temp, low, rain}]
+
+	function loadForecasts() {
+		var ids = pollIds();
+		for (var i = 0; i < ids.length; i++) if (domainOf(ids[i]) === "weather") loadForecast(ids[i], "daily");
+	}
+
+	// HA 2024.x: a service with a response; a weather entity without a daily forecast gets the hourly one
+	function loadForecast(id, type) {
+		request("POST", "/api/services/weather/get_forecasts?return_response", {entity_id: id, type: type}, function(text, err) {
+			var list = null;
+			try {
+				var f = JSON.parse(text).service_response[id].forecast;
+				list = [];
+				for (var i = 0; i < f.length; i++) {
+					list.push({time: parseTime(f[i].datetime).getTime(), condition: f[i].condition || "", temp: f[i].temperature,
+						low: f[i].templow, rain: f[i].precipitation, daily: type === "daily"});
+				}
+			} catch (e) {}
+			if (list === null || list.length === 0) {
+				if (type === "daily") loadForecast(id, "hourly");
+				else if (!forecasts[id]) { var none = copyState(forecasts, {}); none[id] = []; forecasts = none; }
+				return;
+			}
+			var map = copyState(forecasts, {});
+			map[id] = list;
+			forecasts = map;
+			statesUpdated();
+		});
+	}
+
+	function weatherConditionText(c) {
+		return {"clear-night": "Helder", cloudy: "Bewolkt", exceptional: "Waarschuwing", fog: "Mist", hail: "Hagel",
+			lightning: "Onweer", "lightning-rainy": "Onweer en regen", partlycloudy: "Half bewolkt", pouring: "Hevige regen",
+			rainy: "Regen", snowy: "Sneeuw", "snowy-rainy": "Natte sneeuw", sunny: "Zonnig", windy: "Winderig",
+			"windy-variant": "Winderig, bewolkt"}[c] || c;
+	}
+
+	function weatherIconUrl(c) {
+		var known = ["clear-night", "cloudy", "exceptional", "fog", "hail", "lightning", "lightning-rainy", "partlycloudy",
+			"pouring", "rainy", "snowy", "snowy-rainy", "sunny", "windy", "windy-variant"];
+		return Qt.resolvedUrl("drawables/icons/weather-" + (known.indexOf(c) >= 0 ? c : "cloudy") + ".svg");
+	}
+
+	Timer {
+		interval: 30 * 60 * 1000
+		repeat: true
+		running: isConfigured()
+		onTriggered: loadForecasts()
+	}
+
+	// ======================================================================
+	// the Energie tab: today's totals from the meter readings (history since midnight)
+	// ======================================================================
+
+	property variant energyHistory: ({})      // entity id -> {hours: [24 increments], last: reading, day: date string}
+
+	// [{key, label, units: accepted units, total: a meter reading (true) or power now (false)}]
+	function energyFields() {
+		var power = ["W", "kW"], kwh = ["kWh", "Wh", "MWh"];
+		return [
+			{key: "power", label: "Stroom: verbruik nu", units: power, total: false},
+			{key: "usage", label: "Stroom: meterstand verbruik", units: kwh, total: true},
+			{key: "export", label: "Stroom: meterstand teruglevering", units: kwh, total: true},
+			{key: "solarPower", label: "Zonnepanelen: vermogen nu", units: power, total: false},
+			{key: "solar", label: "Zonnepanelen: opgewekt (totaal)", units: kwh, total: true},
+			{key: "gas", label: "Gas: meterstand", units: ["m³", "ft³", "CCF"], total: true},
+			{key: "water", label: "Water: meterstand", units: ["L", "m³", "gal", "ft³"], total: true}];
+	}
+
+	function energyIds() {
+		var out = [];
+		for (var i = 0; i < energyKeys.length; i++) {
+			var list = energy[energyKeys[i]] || [];
+			for (var j = 0; j < list.length; j++) if (out.indexOf(list[j]) < 0) out.push(list[j]);
+		}
+		return out;
+	}
+
+	function energyConfigured() { return energyIds().length > 0; }
+
+	function setEnergy(e) {
+		energy = cleanEnergy(e || {});
+		saveSettings();
+		energyHistory = {};
+		selectionChanged();
+		pollStates();
+		loadEnergyHistory();
+		broadcastState();
+	}
+
+	function setEnergyField(key, ids) {
+		var e = copyState(energy, {});
+		e[key] = ids;
+		setEnergy(e);
+	}
+
+	function pad2(n) { return (n < 10 ? "0" : "") + n; }
+
+	// Home Assistant's times have microseconds ("…T10:00:00.123456+00:00"): the Toon's JavaScript wants at most 3 digits
+	function parseTime(s) {
+		return new Date(String(s || "").replace(/(\.\d{3})\d+/, "$1"));
+	}
+
+	// the readings since midnight (Home Assistant's history) -> the increments per hour
+	function loadEnergyHistory() {
+		if (!isConfigured()) return;
+		var ids = [];
+		var totals = ["usage", "export", "solar", "gas", "water"];
+		for (var i = 0; i < totals.length; i++) {
+			var list = energy[totals[i]] || [];
+			for (var j = 0; j < list.length; j++) if (ids.indexOf(list[j]) < 0) ids.push(list[j]);
+		}
+		if (ids.length === 0) return;
+		var now = new Date();
+		var midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+		var day = midnight.toDateString();
+		request("GET", "/api/history/period/" + midnight.toISOString() + "?filter_entity_id=" + ids.join(",") + "&minimal_response&no_attributes", null, function(text, err) {
+			if (text === null) return;
+			var res;
+			try { res = JSON.parse(text); } catch (e) { return; }
+			var map = {};
+			for (var r = 0; r < res.length; r++) {
+				var rows = res[r];
+				if (!rows || rows.length === 0 || !rows[0].entity_id) continue;
+				var id = rows[0].entity_id;
+				var hours = [];
+				for (var h = 0; h < 24; h++) hours.push(0);
+				var last = null;
+				for (var k = 0; k < rows.length; k++) {
+					var v = parseFloat(rows[k].state);
+					if (isNaN(v)) continue;
+					var t = parseTime(rows[k].last_changed || rows[k].last_updated);
+					if (last !== null) {
+						var hour = isNaN(t.getTime()) || t < midnight ? 0 : t.getHours();
+						hours[hour] += increment(last, v);
+					}
+					last = v;
+				}
+				if (last !== null) map[id] = {hours: hours, last: last, day: day};
+			}
+			energyHistory = map;
+			statesUpdated();
+		});
+	}
+
+	// a meter reading went from a to b: the use in between. A drop is a reset (a daily meter, a new meter)
+	function increment(a, b) {
+		if (b >= a) return b - a;
+		return b < a * 0.5 ? b : 0;      // a small dip is noise of the sensor
+	}
+
+	// a reading in the unit the Energie tab shows: kWh, m³ for gas, litres for water, W for power
+	function energyFactor(unit, key) {
+		if (unit === "Wh") return 0.001;
+		if (unit === "MWh") return 1000;
+		if (unit === "kW") return 1000;
+		if (key === "water" && unit === "m³") return 1000;
+		if (key === "water" && unit === "gal") return 3.785;
+		if (key === "water" && unit === "ft³") return 28.317;
+		if (key === "gas" && unit === "ft³") return 0.02832;
+		if (key === "gas" && unit === "CCF") return 2.832;
+		return 1;
+	}
+
+	function energyUnit(key) {
+		return {power: "W", solarPower: "W", usage: "kWh", "export": "kWh", solar: "kWh", gas: "m³", water: "L"}[key] || "";
+	}
+
+	// power now (W) of a field, summed; null when none of its entities has a number
+	function energyNow(key) {
+		var list = energy[key] || [];
+		var sum = 0, any = false;
+		for (var i = 0; i < list.length; i++) {
+			var s = haStates[list[i]];
+			var v = s ? parseFloat(s.state) : NaN;
+			if (isNaN(v)) continue;
+			sum += v * energyFactor(s.unit, key);
+			any = true;
+		}
+		return any ? sum : null;
+	}
+
+	// today's use of a meter field: {total, hours: [24]} in energyUnit(key); null when unknown yet
+	function energyToday(key) {
+		var list = energy[key] || [];
+		var hours = [], any = false;
+		for (var h = 0; h < 24; h++) hours.push(0);
+		var nowHour = new Date().getHours();
+		var today = new Date().toDateString();
+		for (var i = 0; i < list.length; i++) {
+			var hist = energyHistory[list[i]];
+			if (!hist || hist.day !== today) continue;
+			var s = haStates[list[i]];
+			var f = energyFactor(s ? s.unit : "", key);
+			for (var k = 0; k < 24; k++) hours[k] += hist.hours[k] * f;
+			// what the meter did since the history was fetched
+			var v = s ? parseFloat(s.state) : NaN;
+			if (!isNaN(v)) hours[nowHour] += increment(hist.last, v) * f;
+			any = true;
+		}
+		if (!any) return null;
+		var total = 0;
+		for (var t = 0; t < 24; t++) total += hours[t];
+		return {total: total, hours: hours};
+	}
+
+	function energyNumber(v, key) {
+		if (v === null || v === undefined) return "-";
+		var unit = energyUnit(key);
+		if (unit === "W" && Math.abs(v) >= 1000) return i18n.number(v / 1000, 2, i18n.omit_trail_zeros) + " kW";
+		var digits = unit === "W" || unit === "L" ? 0 : (Math.abs(v) >= 100 ? 0 : (Math.abs(v) >= 10 ? 1 : 2));
+		return i18n.number(v, digits, i18n.omit_trail_zeros) + " " + unit;
+	}
+
+	Timer {
+		// the history: every 5 minutes (a new day starts by itself)
+		interval: 5 * 60 * 1000
+		repeat: true
+		running: isConfigured() && energyConfigured()
+		onTriggered: loadEnergyHistory()
 	}
 
 	// every entity HA has, with its area, plus HA's list of areas (for choosing)
@@ -453,7 +835,7 @@ App {
 		if (!isConfigured()) return;
 		loadingAll = true;
 		var tpl = "{\"areas\": {{ areas() | map('area_name') | list | tojson }}, \"entities\": ["
-			+ "{%- for s in states -%}{{ [s.entity_id, s.name, area_name(s.entity_id), s.state] | tojson }}"
+			+ "{%- for s in states -%}{{ [s.entity_id, s.name, area_name(s.entity_id), s.state, s.attributes.get('unit_of_measurement'), s.attributes.get('device_class')] | tojson }}"
 			+ "{%- if not loop.last %},{% endif -%}{%- endfor -%}]}";
 		template(tpl, function(res, err) {
 			loadingAll = false;
@@ -466,7 +848,7 @@ App {
 			var list = [];
 			for (var i = 0; i < res.entities.length; i++) {
 				var r = res.entities[i];
-				list.push({id: r[0], name: r[1] || "", area: r[2] || "", state: r[3], domain: r[0].split(".")[0]});
+				list.push({id: r[0], name: r[1] || "", area: r[2] || "", state: r[3], domain: r[0].split(".")[0], unit: r[4] || "", deviceClass: r[5] || ""});
 			}
 			list.sort(function(a, b) { return a.id < b.id ? -1 : (a.id > b.id ? 1 : 0); });
 			allEntities = list;
@@ -487,7 +869,8 @@ App {
 	// what a tap on the entity does: "toggle", "press", "run" or "" (read only)
 	function actionOf(id) {
 		var d = domainOf(id);
-		if (["light", "switch", "input_boolean", "fan", "automation", "humidifier", "siren", "cover", "lock", "media_player", "climate", "vacuum", "group"].indexOf(d) >= 0) return "toggle";
+		if (["light", "switch", "input_boolean", "fan", "automation", "siren", "cover", "lock", "vacuum", "group"].indexOf(d) >= 0) return "toggle";
+		if (["climate", "humidifier", "media_player", "camera", "person", "device_tracker"].indexOf(d) >= 0) return "open";
 		if (d === "button" || d === "input_button") return "press";
 		if (d === "script" || d === "scene") return "run";
 		if (d === "alarm_control_panel") return "alarm";
@@ -502,13 +885,14 @@ App {
 	function activate(id) {
 		var d = domainOf(id);
 		if (d === "alarm_control_panel") { openAlarm(id); return; }
+		if (actionOf(id) === "open") { openDetail(id); return; }
 		var on = isOn(id);
 		var service = "";
 		if (d === "button" || d === "input_button") service = "press";
 		else if (d === "script" || d === "scene") service = "turn_on";
 		else if (d === "lock") service = on ? "lock" : "unlock";
 		else if (d === "cover") service = on ? "close_cover" : "open_cover";
-		else if (d === "climate" || d === "media_player" || d === "vacuum") { service = on ? "turn_off" : "turn_on"; }
+		else if (d === "vacuum") { service = on ? "turn_off" : "turn_on"; }
 		else if (actionOf(id) === "toggle") service = "toggle";
 		if (!service) return;
 		if (d === "vacuum" && service === "turn_on") service = "start";
@@ -538,10 +922,35 @@ App {
 		var d = domainOf(id);
 		if (d === "script" || d === "scene" || d === "button" || d === "input_button") return "";
 		if (d === "alarm_control_panel") return alarmStateText(v);
+		if (d === "climate") {
+			var cur = attr(id, "current_temperature"), target = climateTargetText(id);
+			if (v === "off") return (typeof cur === "number" ? degrees(cur) + " · " : "") + "Uit";
+			return (typeof cur === "number" ? degrees(cur) : hvacModeText(v)) + (target ? " → " + target : "");
+		}
+		if (d === "humidifier") {
+			var hum = attr(id, "current_humidity");
+			if (v !== "on") return (typeof hum === "number" ? Math.round(hum) + "% · " : "") + "Uit";
+			return (typeof hum === "number" ? Math.round(hum) + "%" : "Aan") + (typeof attr(id, "humidity") === "number" ? " → " + Math.round(attr(id, "humidity")) + "%" : "");
+		}
+		if (d === "weather") return (typeof attr(id, "temperature") === "number" ? degrees(attr(id, "temperature")) + " " : "") + weatherConditionText(v);
+		if (d === "media_player") {
+			if (v === "playing" || v === "paused") {
+				var title = attr(id, "media_title");
+				return (v === "paused" ? "Pauze" : "Speelt") + (title ? ": " + title : "");
+			}
+			return {off: "Uit", on: "Aan", idle: "Inactief", standby: "Stand-by", buffering: "Laden…"}[v] || v;
+		}
+		if (d === "camera") return {idle: "Inactief", recording: "Neemt op", streaming: "Live"}[v] || v;
+		if (d === "person" || d === "device_tracker") return v === "home" ? "Thuis" : (v === "not_home" ? "Weg" : v);
 		var words = {on: "Aan", off: "Uit", open: "Open", closed: "Dicht", opening: "Gaat open", closing: "Gaat dicht",
 			locked: "Op slot", unlocked: "Open", home: "Thuis", not_home: "Weg", playing: "Speelt", paused: "Pauze",
 			idle: "Inactief", heat: "Verwarmen", cool: "Koelen", auto: "Auto", detected: "Gedetecteerd", clear: "Vrij"};
 		if (d === "light" && v === "on" && s.light && s.light.dimmable && s.light.brightness > 0) return "Aan " + lightPercent(id) + "%";
+		if (d === "fan" && v === "on") {
+			var pct = attr(id, "percentage"), preset = attr(id, "preset_mode");
+			if (typeof pct === "number" && pct > 0 && fanSupports(id, "speed")) return "Aan " + Math.round(pct) + "%";
+			return preset ? "Aan · " + presetText(preset) : "Aan";
+		}
 		if (words[v] && s.unit === "") return words[v];
 		var n = parseFloat(v);
 		if (/^-?\d+(\.\d+)?$/.test(v)) {
@@ -686,6 +1095,154 @@ App {
 		stage.openFullscreen(lightScreenUrl, {entityId: id});
 	}
 
+	// the screen of a thermostat, humidifier, speaker, camera or person
+	function openDetail(id) {
+		var d = domainOf(id);
+		var url = {climate: climateScreenUrl, humidifier: climateScreenUrl, media_player: mediaScreenUrl, camera: cameraScreenUrl,
+			person: personScreenUrl, device_tracker: personScreenUrl}[d];
+		if (url) stage.openFullscreen(url, {entityId: id});
+	}
+
+	// ======================================================================
+	// thermostats (climate), humidifiers, speakers (media_player)
+	// ======================================================================
+
+	// a command for any domain; the change shown at once (state and attributes), HA's answer follows
+	function service(id, domain, name, data, localState, localAttrs) {
+		if (haStates[id] && (localState || localAttrs)) {
+			var map = haStates;
+			var changes = {};
+			if (localState) changes.state = localState;
+			if (localAttrs) changes.attrs = copyState(map[id].attrs || {}, localAttrs);
+			map[id] = copyState(map[id], changes);
+			haStates = map;
+			statesUpdated();
+		}
+		data = data || {};
+		data.entity_id = id;
+		request("POST", "/api/services/" + domain + "/" + name, data, function(text, err) {
+			if (text === null) lastError = domain + ": " + err;
+			actionResult(id, text !== null, text !== null ? "" : friendlyError(err));
+			refreshSoon.restart();
+		});
+	}
+
+	function hvacModeText(m) {
+		return {off: "Uit", heat: "Verwarmen", cool: "Koelen", heat_cool: "Verwarmen/koelen", auto: "Automatisch",
+			dry: "Drogen", fan_only: "Ventileren"}[m] || m;
+	}
+
+	function hvacActionText(a) {
+		return {heating: "verwarmt", cooling: "koelt", idle: "rust", drying: "droogt", fan: "ventileert", preheating: "voorverwarmen",
+			defrosting: "ontdooit"}[a] || "";
+	}
+
+	function presetText(p) {
+		return {none: "Geen", eco: "Eco", away: "Weg", boost: "Boost", comfort: "Comfort", home: "Thuis", sleep: "Slapen",
+			activity: "Actief", normal: "Normaal", baby: "Baby", auto: "Auto"}[p] || (p ? p.charAt(0).toUpperCase() + p.substring(1) : p);
+	}
+
+	// "20,5°", or "19°–23°" for a range (heat_cool); "" when the thermostat has no target
+	function climateTargetText(id) {
+		var t = attr(id, "temperature");
+		if (typeof t === "number") return degrees(t);
+		var lo = attr(id, "target_temp_low"), hi = attr(id, "target_temp_high");
+		if (typeof lo === "number" && typeof hi === "number") return degrees(lo) + "–" + degrees(hi);
+		return "";
+	}
+
+	function climateSetTemperature(id, t) { service(id, "climate", "set_temperature", {temperature: t}, null, {temperature: t}); }
+	function climateSetRange(id, lo, hi) {
+		service(id, "climate", "set_temperature", {target_temp_low: lo, target_temp_high: hi}, null, {target_temp_low: lo, target_temp_high: hi});
+	}
+	function climateSetMode(id, mode) { service(id, "climate", "set_hvac_mode", {hvac_mode: mode}, mode, null); }
+	function climateSetPreset(id, preset) { service(id, "climate", "set_preset_mode", {preset_mode: preset}, null, {preset_mode: preset}); }
+
+	// a fan's features (HA's supported_features bits)
+	function fanSupports(id, what) {
+		var f = haStates[id] ? haStates[id].features : 0;
+		var bits = {speed: 1, oscillate: 2, direction: 4, preset: 8};
+		return (f & bits[what]) !== 0;
+	}
+	// more than on/off: the card gets the tune button, holding it opens the fan screen
+	function fanAdjustable(id) {
+		return domainOf(id) === "fan" && (fanSupports(id, "speed") || fanSupports(id, "oscillate") || fanSupports(id, "direction")
+			|| (fanSupports(id, "preset") && (attr(id, "preset_modes") || []).length > 0));
+	}
+	function fanStep(id) {
+		var st = attr(id, "percentage_step");
+		return typeof st === "number" && st > 0 ? st : 10;
+	}
+	// percent 0..100 (0 switches off), rounded to the fan's own steps
+	function fanSetPercentage(id, pct) {
+		var st = fanStep(id);
+		pct = Math.max(0, Math.min(100, Math.round(Math.round(pct / st) * st)));
+		service(id, "fan", "set_percentage", {percentage: pct}, pct > 0 ? "on" : "off", {percentage: pct});
+	}
+	function fanSetPreset(id, p) { service(id, "fan", "set_preset_mode", {preset_mode: p}, "on", {preset_mode: p}); }
+	function fanOscillate(id, on) { service(id, "fan", "oscillate", {oscillating: on}, null, {oscillating: on}); }
+	function fanDirection(id, dir) { service(id, "fan", "set_direction", {direction: dir}, null, {direction: dir}); }
+	function fanPower(id, on) { service(id, "fan", on ? "turn_on" : "turn_off", {}, on ? "on" : "off", null); }
+	function openFan(id) { stage.openFullscreen(fanScreenUrl, {entityId: id}); }
+
+	function humidifierSetHumidity(id, h) { service(id, "humidifier", "set_humidity", {humidity: h}, null, {humidity: h}); }
+	function humidifierSetMode(id, mode) { service(id, "humidifier", "set_mode", {mode: mode}, null, {mode: mode}); }
+	function humidifierPower(id, on) { service(id, "humidifier", on ? "turn_on" : "turn_off", {}, on ? "on" : "off", null); }
+
+	// a speaker's features (HA's supported_features bits)
+	function mediaSupports(id, what) {
+		var f = haStates[id] ? haStates[id].features : 0;
+		var bits = {pause: 1, volume: 4, mute: 8, previous: 16, next: 32, on: 128, off: 256, step: 1024, source: 2048, stop: 4096, play: 16384};
+		return (f & bits[what]) !== 0;
+	}
+
+	function mediaPlayPause(id) {
+		var playing = haStates[id] && haStates[id].state === "playing";
+		service(id, "media_player", "media_play_pause", {}, playing ? "paused" : "playing", null);
+	}
+	function mediaNext(id) { service(id, "media_player", "media_next_track", {}, null, null); }
+	function mediaPrevious(id) { service(id, "media_player", "media_previous_track", {}, null, null); }
+	function mediaPower(id, on) { service(id, "media_player", on ? "turn_on" : "turn_off", {}, on ? "on" : "off", null); }
+	function mediaSetVolume(id, v) {
+		v = Math.round(Math.max(0, Math.min(1, v)) * 100) / 100;
+		service(id, "media_player", "volume_set", {volume_level: v}, null, {volume_level: v});
+	}
+	function mediaVolumeStep(id, up) {
+		var v = attr(id, "volume_level");
+		if (typeof v === "number" && mediaSupports(id, "volume")) mediaSetVolume(id, v + (up ? 0.05 : -0.05));
+		else service(id, "media_player", up ? "volume_up" : "volume_down", {}, null, null);
+	}
+	function mediaMute(id) {
+		var m = attr(id, "is_volume_muted") === true;
+		service(id, "media_player", "volume_mute", {is_volume_muted: !m}, null, {is_volume_muted: !m});
+	}
+	function mediaSource(id, source) { service(id, "media_player", "select_source", {source: source}, null, {source: source}); }
+	function mediaIsOff(id) {
+		var s = haStates[id] ? haStates[id].state : "";
+		return s === "off" || s === "standby" || s === "unavailable" || s === "";
+	}
+
+	// a camera's still image: Home Assistant's camera proxy (entity_picture holds a token), with a new
+	// number each time so it is fetched again
+	property int cameraTick: 0
+	function cameraUrl(id) {
+		var p = attr(id, "entity_picture");
+		if (!p) return "";
+		return haUrl + p + (p.indexOf("?") >= 0 ? "&" : "?") + "t=" + cameraTick;
+	}
+
+	// "sinds 14:05" / "sinds gisteren" for a person's state
+	function sinceText(id) {
+		var c = haStates[id] ? haStates[id].changed : 0;
+		if (!c) return "";
+		var t = new Date(c * 1000), now = new Date();
+		var hm = pad2(t.getHours()) + ":" + pad2(t.getMinutes());
+		if (t.toDateString() === now.toDateString()) return "sinds " + hm;
+		var y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+		if (t.toDateString() === y.toDateString()) return "sinds gisteren " + hm;
+		return "sinds " + t.getDate() + "-" + (t.getMonth() + 1) + " " + hm;
+	}
+
 	// mode: the button pressed on the alarm card when the panel needs a code (the screen asks for it)
 	function openAlarm(id, mode) {
 		stage.openFullscreen(alarmScreenUrl, {entityId: id, mode: mode || ""});
@@ -695,7 +1252,7 @@ App {
 		id: pollTimer
 		interval: pollSeconds * 1000
 		repeat: true
-		running: isConfigured() && entities.length > 0
+		running: isConfigured() && pollIds().length > 0
 		onTriggered: pollStates()
 	}
 
@@ -800,6 +1357,8 @@ App {
 			sortMode: sortMode,
 			systray: enableSystray,
 			areaOrder: areaOrder,
+			energy: energy,
+			energyFields: energyFields(),
 			entities: entities,
 			areas: areaNames,
 			all: allEntities
@@ -842,6 +1401,11 @@ App {
 			if (m.sortMode) sortMode = m.sortMode;
 			if (m.systray !== undefined) enableSystray = m.systray === true;
 			if (m.areaOrder) areaOrder = m.areaOrder;
+			if (m.energy) {
+				energy = cleanEnergy(m.energy);
+				energyHistory = {};
+				loadEnergyHistory();
+			}
 			setEntities(m.entities || []);
 			sendTo(socket, JSON.stringify({type: "saved"}));
 		}

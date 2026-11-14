@@ -128,12 +128,12 @@ Screen {
 
 				Image {
 					id: starIcon
-					visible: model.key === "*fav"
+					visible: model.key === "*fav" || model.key === "*energy"
 					width: isNxt ? 22 : 18
 					height: width
 					sourceSize.width: width
 					sourceSize.height: height
-					source: "qrc:/images/star-on.svg"
+					source: model.key === "*energy" ? Qt.resolvedUrl("drawables/icons/energy-on.svg") : "qrc:/images/star-on.svg"
 					anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
 				}
 				Text {
@@ -220,6 +220,7 @@ Screen {
 			bottomMargin: isNxt ? 16 : 10
 		}
 		clip: true
+		visible: tabKey !== "*energy"
 		model: pages.length
 		orientation: ListView.Vertical
 		snapMode: ListView.SnapOneItem
@@ -239,13 +240,13 @@ Screen {
 				spacing: homeassistantScreen.gap
 				Repeater {
 					model: ids
-					// an ordinary card, or the double alarm card
+					// an ordinary card, or a double one (alarm, speaker, camera, weather)
 					Loader {
 						id: cardLoader
 						property int slots: Math.min(homeassistantScreen.columns, app.cardSlots(modelData))
 						width: slots * homeassistantScreen.cellWidth + (slots - 1) * homeassistantScreen.gap
 						height: homeassistantScreen.cellHeight
-						source: slots > 1 ? "HaAlarmCard.qml" : "HaCard.qml"
+						source: app.cardFile(modelData)
 						onLoaded: item.entityId = modelData
 						Binding { target: cardLoader.item; property: "rev"; value: homeassistantScreen.rev; when: cardLoader.status === Loader.Ready }
 						Connections {
@@ -259,6 +260,13 @@ Screen {
 		}
 	}
 
+	// ---- the Energie tab ----
+	HaEnergyView {
+		anchors.fill: pagesView
+		visible: tabKey === "*energy"
+		rev: homeassistantScreen.rev
+	}
+
 	// ---- pages: arrows and dots (only with more than one page) ----
 	Column {
 		id: pager
@@ -269,7 +277,7 @@ Screen {
 			rightMargin: isNxt ? 16 : 10
 			verticalCenter: pagesView.verticalCenter
 		}
-		opacity: pages.length > 1 ? 1 : 0
+		opacity: pages.length > 1 && tabKey !== "*energy" ? 1 : 0
 
 		IconButton {
 			width: parent.width

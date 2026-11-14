@@ -45,6 +45,57 @@ the order of the areas. A web editor makes setup easy when there are many entiti
 |---|---|
 | ![Alarm card, armed](screenshots/alarm-card.png) | ![Alarm screen with keypad](screenshots/alarm-keypad.png) |
 
+- **Thermostats** (`climate`) show the room temperature in large text, with the target and what it does
+  ("Naar 20,5° · verwarmt"); the card lights up while heating. A tap opens its screen: the target with
+  - and + (sent a moment after your last tap), and buttons for the mode (Uit, Verwarmen, Automatisch, …)
+  and the presets (Eco, Comfort, Weg, …). A thermostat with a range (heat_cool) gets a low and a high target.
+- **Fans**: a tap switches, the card shows the speed ("Aan 50%"). The settings button (or holding the
+  card) opens the fan screen: on/off, the speed (slider, and - and + in the fan's own steps), and when the
+  fan has them its presets, oscillation (Zwenken) and direction.
+- **Humidifiers** work the same way as thermostats: the humidity now on the card; the screen has the target humidity,
+  on/off and the modes.
+- **Speakers** (`media_player`) get a double card: album art, what plays, and the keys previous,
+  play/pause, next and (when there is room) volume - and +. A tap elsewhere on the card opens the speaker
+  screen: big keys, a volume slider, mute, power and the source (Radio, Spotify, …).
+- **Cameras** get a double card with their still image, renewed with every poll. A tap shows it full
+  screen, renewed every 2 seconds. The image comes from Home Assistant's camera proxy.
+- **Persons** and **device trackers**: Thuis, Weg or the name of the zone, with the photo from Home
+  Assistant when there is one. A tap opens a screen with "sinds 14:05", the accuracy, and a **map** with
+  the location (zoom with - and +).
+- **Weather** gets a double card: the icon, temperature and what it is now, humidity and wind, and the
+  forecast for the next days (or hours, when the weather entity has no daily forecast).
+
+| New cards | Thermostat |
+|---|---|
+| ![Thermostat, speaker, weather and a person as cards](screenshots/new-cards.png) | ![The thermostat screen](screenshots/climate.png) |
+
+| Speaker | Person with map |
+|---|---|
+| ![The speaker screen](screenshots/media.png) | ![The person screen with a map](screenshots/person-map.png) |
+
+- **An Energie tab** (only when you set it up): electricity, solar panels, gas and water. Each panel shows
+  today's total, the power now (electricity: also what goes back to the grid), and today per hour as bars
+  (electricity sent back below the line). It has its own entities, apart from the cards: *Instellingen >
+  Energie* on the Toon, or the Energie section of the web editor. Per part you choose one or more entities;
+  more are added up (e.g. the two tariffs of a smart meter, or three phases):
+
+  | Part | Unit | |
+  |---|---|---|
+  | Stroom: verbruik nu | W, kW | power now (negative = sending back) |
+  | Stroom: meterstand verbruik | kWh, Wh | meter reading(s) |
+  | Stroom: meterstand teruglevering | kWh, Wh | meter reading(s) |
+  | Zonnepanelen: vermogen nu | W, kW | |
+  | Zonnepanelen: opgewekt (totaal) | kWh, Wh | |
+  | Gas: meterstand | m³ | |
+  | Water: meterstand | L, m³ | shown in litres |
+
+  For a meter reading the app works out today's use itself, from Home Assistant's history since midnight
+  (every 5 minutes, plus the live reading). A meter that resets (a daily utility meter) works too.
+
+| Energie tab | Energie settings on the Toon |
+|---|---|
+| ![The Energie tab](screenshots/energy.png) | ![Choosing the energy entities on the Toon](screenshots/energy-settings.png) |
+
 - **A tile** with your favourites, each with its state. Tap a row to switch it; the rest of the tile
   opens the main screen.
 - **The Home Assistant icon in the systray** (optional, in *Instellingen* or the web editor). A tap
@@ -84,8 +135,8 @@ app over a WebSocket on **port 8137**. The app adds that port to `/etc/default/i
 real Toon the firewall doesn't pick up the port by itself.** If the web editor can't connect to the Toon,
 press **Flush firewall rules** (Instellingen > TSC); a reboot isn't needed. A reboot works too.
 
-On a phone the page has three tabs at the top: **Gekozen** (with the number chosen), **Toevoegen** and
-**Verbinding**. It opens on the one you need: Verbinding when Home Assistant isn't set up yet, Toevoegen
+On a phone the page has four tabs at the top: **Gekozen** (with the number chosen), **Toevoegen**,
+**Energie** and **Verbinding**. It opens on the one you need: Verbinding when Home Assistant isn't set up yet, Toevoegen
 when nothing is chosen, otherwise Gekozen. On a computer you see everything side by side.
 
 In the web editor you can:
@@ -95,6 +146,7 @@ In the web editor you can:
   area (▲▼, or sort by name or favourites first): that's the order of the cards on the Toon;
 - set the **order of the areas** (▲▼ next to an area's name): that's the order of the tabs on the Toon.
   *Ruimtes zoals in Home Assistant* goes back to Home Assistant's order;
+- choose the entities of the **Energie** tab (a list per part, only entities with a fitting unit);
 - turn the systray icon on or off.
 
 Press **Opslaan op Toon** to save. The Toon updates right away.
@@ -113,11 +165,26 @@ Only the REST API, with the token as a `Bearer` header:
 - `POST /api/template` to get all entities with their area and Home Assistant's area list (when choosing,
   and every 30 minutes). It also fetches the states of the chosen entities in **one small request**
   every 10 seconds (`pollSeconds` in the settings), with the alarm attributes `code_format`,
-  `code_arm_required` and `supported_features`, and for lights `brightness`, `supported_color_modes`,
-  `hs_color`, `color_temp_kelvin` and its range;
+  `code_arm_required` and `supported_features`, for lights `brightness`, `supported_color_modes`,
+  `hs_color`, `color_temp_kelvin` and its range, and the attributes a thermostat, humidifier, speaker,
+  camera, person or weather card needs;
+- `POST /api/services/weather/get_forecasts?return_response` for the forecast (every 30 minutes;
+  Home Assistant 2024.x or newer);
+- `GET /api/history/period/<midnight>?filter_entity_id=…&minimal_response&no_attributes` for the Energie
+  tab's meter readings since midnight (every 5 minutes);
+- `GET /api/camera_proxy/<camera>?token=…` for camera images, and the photos and album art Home Assistant
+  gives in `entity_picture` (these carry their own token);
 - `POST /api/services/<domain>/<service>` to switch (e.g. `light/toggle`, `light/turn_on` with
   `brightness_pct`, `hs_color` or `color_temp_kelvin`, `scene/turn_on`,
-  `alarm_control_panel/alarm_arm_away` with `code`).
+  `alarm_control_panel/alarm_arm_away` with `code`, `climate/set_temperature`, `climate/set_hvac_mode`,
+  `climate/set_preset_mode`, `humidifier/set_humidity`, `media_player/media_play_pause`,
+  `media_player/volume_set`, `media_player/select_source`, `fan/set_percentage`, `fan/set_preset_mode`,
+  `fan/oscillate`, `fan/set_direction`).
+
+**The map** on the person screen uses Esri's World Street Map tiles. OpenStreetMap's own tile servers
+refuse an app like this one (their tile usage policy wants an identifying User-Agent, which a QML image
+can't send). For another map, put its tile address in the settings file as `"mapTileUrl"`, with `{z}`,
+`{x}` and `{y}`, and restart the GUI.
 
 ## Files
 
@@ -132,15 +199,26 @@ Only the REST API, with the token as a `Bearer` header:
 | `HomeassistantEntitiesScreen.qml` | the entity chooser on the Toon |
 | `HomeassistantAlarmScreen.qml` | an alarm panel with keypad |
 | `HomeassistantLightScreen.qml` | a light: brightness, colour, colour temperature |
+| `HomeassistantClimateScreen.qml` | a thermostat or humidifier: target, mode, presets |
+| `HomeassistantFanScreen.qml` | a fan: speed, presets, oscillation, direction |
+| `HomeassistantMediaScreen.qml` | a speaker: keys, volume, power, source |
+| `HomeassistantCameraScreen.qml` | a camera, full screen |
+| `HomeassistantPersonScreen.qml` | a person or device tracker, with the map |
+| `HomeassistantEnergySetupScreen.qml` | the Energie tab's entities, on the Toon |
+| `HaMediaCard.qml`, `HaCameraCard.qml`, `HaWeatherCard.qml` | the double cards of a speaker, camera and the weather |
+| `HaEnergyView.qml`, `HaBarChart.qml` | the Energie tab and its bars per hour |
+| `HaCameraImage.qml` | a camera image that renews without flicker |
+| `HaRoundButton.qml` | the round buttons (media keys, - and +) |
 | `HaSlider.qml` | the touch slider used on the light screen |
 | `HomeassistantTray.qml` | the systray icon |
 | `webeditor.html` | the web editor (published to `/qmf/www`) |
 | `drawables/ha-logo.svg` | the logo |
-| `drawables/icons/` | the icons per type (`<name>.svg`, `-on` when on, `-dim` for the dimmed screen) |
+| `drawables/icons/` | the icons per type (`<name>.svg`, `-on` when on, `-dim` for the dimmed screen), `weather-<condition>.svg` |
 | `screenshots/` | the pictures in this README (from the simulator, Toon 2) |
 
 Settings: `/mnt/data/tsc/homeassistantExtended.userSettings.json` (`url`, `token`, `entities: [{id, name, fav}]`,
-`areaOrder`, `enableSystray`, `pollSeconds`, `webPort`).
+`areaOrder`, `energy: {power, usage, export, solarPower, solar, gas, water}` (lists of entity ids),
+`enableSystray`, `pollSeconds`, `webPort`, `mapTileUrl`).
 
 Written for the Toon's Qt 5.11, so the QML uses only ES5 JavaScript.
 
@@ -149,5 +227,6 @@ Written for the Toon's Qt 5.11, so the QML uses only ES5 JavaScript.
 `python tools\run_tests.py homeassistant` (also with `--size toon1`) runs `tests\test_homeassistant.py`
 against a fake Home Assistant: connection test, choosing/renaming/favourites, sorting, switching,
 the main screen (tabs, pages, value cards, tapping a card, the notice after a failed command), the empty
-screen, the tile, the systray option, alarm panels (the card and the screen) with and without a code, and
-light brightness, colour and colour temperature.
+screen, the tile, the systray option, alarm panels (the card and the screen) with and without a code,
+light brightness, colour and colour temperature, fans, thermostats and humidifiers, speakers, weather, cameras,
+persons with the map, and the Energie tab (today's totals from the history, its settings, the web editor).

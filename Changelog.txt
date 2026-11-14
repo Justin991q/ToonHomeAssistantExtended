@@ -1,3 +1,16 @@
+1.1.0
+- Energie tab: electricity (now, today, sent back), solar panels, gas and water today, with a bar per hour;
+  its own entities (Instellingen > Energie, or the web editor), today's use worked out from the meter readings
+- Thermostats (climate): room temperature on the card; screen with target -/+, mode and presets
+- Humidifiers: humidity on the card; screen with target -/+, on/off and modes
+- Fans: speed on the card; screen with speed (slider, -/+ in the fan's steps), presets, oscillation, direction
+- Speakers (media_player): double card with album art and keys; screen with volume, mute, power and source
+- Cameras: double card with the still image; full screen that renews every 2 seconds
+- Persons and device trackers: Thuis / Weg / zone and since when; screen with a map of the location
+- Weather: double card with now and the forecast (weather.get_forecasts)
+- Web editor: Energie section (a tab on phones)
+- Fix: the entity list failed (HTTP 400) for entities without a unit
+
 1.0.0
 - First version: Home Assistant entities on the Toon (tile, list per area / name / own order, favourites)
 - Setup on the Toon and in a web editor (http://<toon-ip>/homeassistant.html, port 8137)
