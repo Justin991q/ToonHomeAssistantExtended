@@ -1,42 +1,71 @@
 # Home-Assistant Extended for Toon
 
-Shows and controls entities from your own Home Assistant on a (rooted) Toon. You choose the entities and
-can rename them. You can mark favourites for the tile, and the full list is grouped by Home Assistant area.
-A web editor makes setup easy when there are many entities.
+Shows and controls entities from your own Home Assistant on a (rooted) Toon. Your entities appear as
+cards, sorted into Home Assistant's areas. You choose which entities, rename them, mark favourites and set
+the order of the areas. A web editor makes setup easy when there are many entities.
+
+![The main screen: the areas on the left, the cards of the living room on the right](screenshots/area.png)
 
 ## What you get
 
-- **A tile** with your favourites (no favourites yet: the first chosen entities), each with its state.
-  Tap a light or switch row to toggle it, a scene or script row to run it, an alarm row to open the
-  alarm panel. Tapping anywhere else opens the full list.
-- **A scrollable list** of all chosen entities. You can sort it **per area** (Home Assistant's own areas,
-  in Home Assistant's order, with a heading per area), **by name** or in **your own order**, and show
-  **only favourites**. Tap the star to make an entity a favourite. Scroll by flicking or with the arrow
-  buttons. Each row has an on/off switch, *Start* (scene/script), *Druk* (button) or *Bedien* (alarm).
-- **Lights**: tap the row of a dimmable lamp (marked with an arrow) to open its screen with the
-  on/off switch, a **brightness** slider with -/+ (10%), and when the lamp supports them a **colour** bar with
-  colour buttons (white, red, orange, yellow, green, cyan, blue, purple, pink) and a **colour temperature**
-  slider (warm to cool, within the lamp's own range). The command goes out when you let go of a slider.
-  The list shows the brightness: "Aan 60%". A lamp that only switches on and off has no screen.
-- **Alarm panels** (`alarm_control_panel`): a screen with the state, a button for each arm mode the
-  panel supports (Afwezig, Thuis, Nacht, Vakantie, Aangepast) and Uitschakelen.
+- **A main screen with cards.** The areas are tabs on the left: **Favorieten** first, then the areas
+  in your order, **Overig** (entities without an area) last. The number next to an area is how many
+  lights and switches are on there. On the right are the cards of that area, 9 per page. Swipe or use the
+  arrows; the dots show the page.
+  - **Tap a card** to switch it (light, switch, fan, cover, lock, …), run it (scene, script) or
+    press it (button). It lights up in warm yellow when on, and pulses briefly until Home Assistant
+    answers. If the command fails, the card goes back and a short notice appears at the bottom.
+  - **Sensors** show their value in large text: "21,4 °C", "350 W".
+  - Each type has its own icon: lamp, plug, thermometer, blinds, shield, …
+  - A small dot at the bottom left shows the connection. Words only appear when something is wrong.
+
+| Favourites | A failed command |
+|---|---|
+| ![Favourites tab](screenshots/favourites.png) | ![Notice at the bottom after a failed command](screenshots/failed-notice.png) |
+
+- **Lights**: the settings button on a dimmable lamp's card (or holding the card) opens its screen:
+  the on/off switch, a **brightness** slider with -/+ (10%), and when the lamp supports them a **colour**
+  bar with colour buttons and a **colour temperature** slider (warm to cool, within the lamp's own range).
+  The command goes out when you let go of a slider. The card shows the brightness: "Aan 60%".
+
+  ![The light screen with brightness, colour and colour temperature](screenshots/light.png)
+
+- **Alarm panels** (`alarm_control_panel`) get a **double card**: a shield in the state's colour (green
+  off, red on), the state, and buttons right on the card. When it's off, it shows the arm modes the panel
+  has (Afwezig, Thuis, Nacht, …, as many as fit). When it's on, it shows *Uitschakelen*.
   - without a code: the buttons work right away;
-  - with a numeric code: a keypad, type the code and then press the mode;
-  - with a text code: *Code invoeren* opens the keyboard.
+  - with a code: the alarm screen opens with the mode already chosen; type the code on the keypad
+    (numeric codes) or with *Code invoeren* (text codes), then press the mode.
+
   The code is only sent to Home Assistant and is never saved. If Home Assistant refuses a wrong code,
-  you get the message "Geweigerd (verkeerde code?)". Arming only asks for a code when the panel
-  needs one for arming (`code_arm_required`).
-- **The Home Assistant icon in the systray** (optional, see *Instellingen* or the web editor). A tap
-  opens the list. A red dot appears on it when one of your alarm panels goes off.
+  you get the message "Geweigerd (verkeerde code?)". Arming only asks for a code when the panel needs one
+  for arming (`code_arm_required`). The card pulses red while the alarm is going off.
+
+| Alarm card | Alarm screen with keypad |
+|---|---|
+| ![Alarm card, armed](screenshots/alarm-card.png) | ![Alarm screen with keypad](screenshots/alarm-keypad.png) |
+
+- **A tile** with your favourites, each with its state. Tap a row to switch it; the rest of the tile
+  opens the main screen.
+- **The Home Assistant icon in the systray** (optional, in *Instellingen* or the web editor). A tap
+  opens the main screen. A red dot appears on it when one of your alarm panels goes off.
+
+  ![Home screen with the tile and the systray icon](screenshots/home-tile.png)
+
 - **A setup screen on the Toon**: address, token, connection test, the systray option, and an entity
   chooser with search, area and type filters, plus rename (pencil) and favourite (star).
+
+| Settings | Choosing entities on the Toon |
+|---|---|
+| ![Settings](screenshots/settings.png) | ![Entity chooser](screenshots/choose-entities.png) |
+
 - **A web editor** at `http://<toon-ip>/homeassistant.html`.
 
 ## Setup
 
 1. In Home Assistant, open your profile, then **Security**, then **Long-lived access tokens**, and create
    a token.
-2. On the Toon, add the *Home-Assistant Extended* tile, tap it, then **Instellingen**. Enter the address (e.g.
+2. On the Toon, add the *Home-Assistant* tile, tap it, then **Instellingen**. Enter the address (e.g.
    `192.168.1.10:8123`; `http://` and port 8123 are added when you leave them out). Typing the token
    on the Toon works, but it is long: the web editor is easier for that.
 3. Choose entities on the Toon (**Entiteiten kiezen**) or in the web editor.
@@ -53,7 +82,10 @@ press **Flush firewall rules** (Instellingen > TSC); a reboot isn't needed. A re
 In the web editor you can:
 - set the address and token (the token is write-only: the page never gets it back from the Toon);
 - tick entities, or tick all entities of an area at once; filter by search, area and type;
-- rename entities, mark favourites, set your own order (▲▼, or sort by area, by name or favourites first);
+- see your chosen entities grouped per area; rename them, mark favourites and set their order within the
+  area (▲▼, or sort by name or favourites first): that's the order of the cards on the Toon;
+- set the **order of the areas** (▲▼ next to an area's name): that's the order of the tabs on the Toon.
+  *Ruimtes zoals in Home Assistant* goes back to Home Assistant's order;
 - turn the systray icon on or off.
 
 Press **Opslaan op Toon** to save. The Toon updates right away.
@@ -84,7 +116,9 @@ Only the REST API, with the token as a `Bearer` header:
 |---|---|
 | `HomeassistantExtendedApp.qml` | settings, Home Assistant client, polling, alarm commands, web editor server |
 | `HomeassistantTile.qml` | the tile with favourites |
-| `HomeassistantScreen.qml` | the scrollable list (area / name / own order, favourites) |
+| `HomeassistantScreen.qml` | the main screen: area tabs and pages of cards |
+| `HaCard.qml` | a card: icon, name, state, tap feedback |
+| `HaAlarmCard.qml` | the double card of an alarm panel, with its buttons |
 | `HomeassistantSetupScreen.qml` | address, token, test, systray option |
 | `HomeassistantEntitiesScreen.qml` | the entity chooser on the Toon |
 | `HomeassistantAlarmScreen.qml` | an alarm panel with keypad |
@@ -93,9 +127,11 @@ Only the REST API, with the token as a `Bearer` header:
 | `HomeassistantTray.qml` | the systray icon |
 | `webeditor.html` | the web editor (published to `/qmf/www`) |
 | `drawables/ha-logo.svg` | the logo |
+| `drawables/icons/` | the icons per type (`<name>.svg`, `-on` when on, `-dim` for the dimmed screen) |
+| `screenshots/` | the pictures in this README (from the simulator, Toon 2) |
 
 Settings: `/mnt/data/tsc/homeassistantExtended.userSettings.json` (`url`, `token`, `entities: [{id, name, fav}]`,
-`sortMode`, `favouritesOnly`, `enableSystray`, `pollSeconds`, `webPort`).
+`areaOrder`, `enableSystray`, `pollSeconds`, `webPort`).
 
 Written for the Toon's Qt 5.11, so the QML uses only ES5 JavaScript.
 
@@ -103,5 +139,6 @@ Written for the Toon's Qt 5.11, so the QML uses only ES5 JavaScript.
 
 `python tools\run_tests.py homeassistant` (also with `--size toon1`) runs `tests\test_homeassistant.py`
 against a fake Home Assistant: connection test, choosing/renaming/favourites, sorting, switching,
-the screens, the tile, the systray option, alarm panels with and without a code, and light brightness,
-colour and colour temperature.
+the main screen (tabs, pages, value cards, tapping a card, the notice after a failed command), the empty
+screen, the tile, the systray option, alarm panels (the card and the screen) with and without a code, and
+light brightness, colour and colour temperature.

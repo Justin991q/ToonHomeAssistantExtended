@@ -9,3 +9,8 @@
 - Renamed to Home-Assistant Extended
 - Web editor shows how to fix a missing connection: "Flush firewall rules" (Instellingen > TSC)
 - Folder renamed to homeassistantExtended
+- New main screen: areas as tabs (Favorieten first, Overig last), entities as cards, 9 per page
+- Icons per type; cards light up when on, pulse until Home Assistant answers, notice when a command fails
+- Alarm panels as a double card with their buttons; with a code the alarm screen opens with the mode chosen
+- Set the order of the areas in the web editor; "Gekozen" is grouped per area
+- Screenshots in the README

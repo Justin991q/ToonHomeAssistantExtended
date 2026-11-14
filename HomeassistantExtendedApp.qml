@@ -26,6 +26,8 @@ App {
 	property url tileUrl: "HomeassistantTile.qml"
 	property url thumbnailIcon: "drawables/ha-logo.svg"
 	property url logoUrl: "drawables/ha-logo.svg"
+	// the title bar shows its icon through the Toon's image provider, which wants the device path
+	property url titleIconUrl: "file:///qmf/qml/apps/homeassistantExtended/drawables/ha-logo.svg"
 	property url trayUrl: "HomeassistantTray.qml"
 	property SystrayIcon homeassistantTray
 	property HomeassistantAlarmScreen homeassistantAlarmScreen
@@ -51,6 +53,7 @@ App {
 	property string sortMode: "area"          // screen: "area", "name" or "own"
 	property bool favouritesOnly: false       // screen: only the favourites
 	property bool enableSystray: false        // the Home Assistant icon in the systray (top of the screen)
+	property variant areaOrder: []            // your order of the areas (web editor); areas not in it follow in HA's order
 
 	// ---- live data ----
 	property variant haStates: ({})             // entity id -> {state, unit, name (HA's), area}
@@ -70,6 +73,7 @@ App {
 	signal statesUpdated()
 	signal selectionChanged()
 	signal allEntitiesLoaded()
+	signal actionResult(string entityId, bool ok, string message)   // a tap's command came back: for the card's feedback
 
 	FileIO { id: settingsFile; source: "file:///mnt/data/tsc/homeassistantExtended.userSettings.json" }
 	FileIO { id: versionFile; source: "file:///qmf/qml/apps/homeassistantExtended/version.txt" }
@@ -115,6 +119,7 @@ App {
 			sortMode = s.sortMode || "area";
 			favouritesOnly = s.favouritesOnly === true;
 			enableSystray = s.enableSystray === true;
+			areaOrder = s.areaOrder || [];
 			if (s.webPort > 0) webPort = s.webPort;
 		} catch (e) {
 			// first start: nothing saved yet
@@ -130,6 +135,7 @@ App {
 			sortMode: sortMode,
 			favouritesOnly: favouritesOnly,
 			enableSystray: enableSystray,
+			areaOrder: areaOrder,
 			webPort: webPort
 		}, null, 1));
 	}
@@ -259,10 +265,94 @@ App {
 	}
 
 	// HA's area order, entities without an area last
+	// your order first (areaOrder), then HA's order, then areas HA's list does not have; no area last
 	function areaRank(area) {
 		if (!area) return 100000;
+		var own = areaOrder.indexOf(area);
+		if (own >= 0) return own;
 		var i = areaNames.indexOf(area);
-		return i >= 0 ? i : 50000 + area.toLowerCase().charCodeAt(0);
+		return i >= 0 ? 1000 + i : 50000 + area.toLowerCase().charCodeAt(0);
+	}
+
+	// ======================================================================
+	// the main screen: tabs per area, icons
+	// ======================================================================
+
+	property variant currentTab: null         // the tab the main screen showed last (not saved); null = none yet ("" is Overig)
+
+	// [{key, label}]: Favorieten (when there are any), HA's areas that have chosen entities, then Overig
+	function tabList() {
+		var out = [];
+		var hasFav = false, hasNoArea = false, used = {};
+		for (var i = 0; i < entities.length; i++) {
+			if (entities[i].fav) hasFav = true;
+			var a = areaOf(entities[i].id);
+			if (a) used[a] = true; else hasNoArea = true;
+		}
+		if (hasFav) out.push({key: "*fav", label: "Favorieten"});
+		var areas = [];
+		for (var k in used) areas.push(k);
+		areas.sort(function(a, b) { return (areaRank(a) - areaRank(b)) || (a < b ? -1 : (a > b ? 1 : 0)); });
+		for (var r = 0; r < areas.length; r++) out.push({key: areas[r], label: areas[r]});
+		if (hasNoArea) out.push({key: "", label: "Overig"});
+		return out;
+	}
+
+	// the entity ids of a tab, in your own order
+	function tabEntities(key) {
+		var out = [];
+		for (var i = 0; i < entities.length; i++) {
+			var e = entities[i];
+			if (key === "*fav" ? e.fav : areaOf(e.id) === key) out.push(e.id);
+		}
+		return out;
+	}
+
+	// how many lights/switches are on in a tab: shown next to its name
+	function tabOnCount(key) {
+		var ids = tabEntities(key);
+		var n = 0;
+		for (var i = 0; i < ids.length; i++) if (actionOf(ids[i]) === "toggle" && isOn(ids[i])) n++;
+		return n;
+	}
+
+	// the icon for an entity: drawables/icons/<name>.svg (-on.svg when on, -dim.svg dimmed)
+	function iconName(id) {
+		var d = domainOf(id);
+		var unit = haStates[id] ? haStates[id].unit : "";
+		var map = {light: "bulb", "switch": "plug", fan: "fan", cover: "blinds", lock: "lock", alarm_control_panel: "shield",
+			scene: "play", script: "play", button: "button", input_button: "button", climate: "flame", water_heater: "flame",
+			media_player: "speaker", person: "person", device_tracker: "person", binary_sensor: "eye", input_boolean: "toggle",
+			automation: "bolt", vacuum: "robot", humidifier: "droplet"};
+		if (map[d]) return map[d];
+		if (d === "sensor" || d === "input_number" || d === "number") {
+			if (unit === "°C" || unit === "°F") return "thermometer";
+			if (unit === "%") return "droplet";
+			if (unit === "W" || unit === "kW" || unit === "kWh" || unit === "Wh" || unit === "V" || unit === "A") return "bolt";
+			return "gauge";
+		}
+		return "generic";
+	}
+
+	function iconUrl(id, dim) {
+		return Qt.resolvedUrl("drawables/icons/" + iconName(id) + (dim ? "-dim" : (actionOf(id) === "toggle" && isOn(id) ? "-on" : "")) + ".svg");
+	}
+
+	// how many grid cells a card takes: an alarm panel is a double card (state and its buttons)
+	function cardSlots(id) { return domainOf(id) === "alarm_control_panel" ? 2 : 1; }
+
+	// a sensor shows its value big: "21,4°"; the rest a word
+	function isValueCard(id) {
+		var d = domainOf(id);
+		if (d !== "sensor" && d !== "input_number" && d !== "number") return false;
+		var s = haStates[id];
+		return s && /^-?\d+(\.\d+)?$/.test(s.state);
+	}
+
+	function friendlyError(err) {
+		if (err === "geen verbinding") return "Geen verbinding met Home Assistant";
+		if (err === "token ongeldig (401)") return "Home Assistant weigert het token";
+		return "Dat lukte niet (" + err + ")";
 	}
 
 	function favouriteList() {
@@ -432,6 +522,7 @@ App {
 		}
 		request("POST", "/api/services/" + d + "/" + service, {entity_id: id}, function(text, err) {
 			if (text === null) lastError = "Schakelen mislukt: " + err;
+			actionResult(id, text !== null, text !== null ? "" : friendlyError(err));
 			refreshSoon.restart();
 		});
 	}
@@ -503,9 +594,12 @@ App {
 		request("POST", "/api/services/alarm_control_panel/alarm_" + mode, body, function(text, err) {
 			if (text === null) {
 				lastError = "Alarm: " + err;
-				if (onDone) onDone(false, err === "HTTP 400" || err === "HTTP 500" ? "Geweigerd (verkeerde code?)" : err);
-			} else if (onDone) {
-				onDone(true, "");
+				var msg = err === "HTTP 400" || err === "HTTP 500" ? "Geweigerd (verkeerde code?)" : err;
+				if (onDone) onDone(false, msg);
+				actionResult(id, false, msg);
+			} else {
+				if (onDone) onDone(true, "");
+				actionResult(id, true, "");
 			}
 			refreshSoon.restart();
 		});
@@ -581,6 +675,7 @@ App {
 		data.entity_id = id;
 		request("POST", "/api/services/light/" + service, data, function(text, err) {
 			if (text === null) lastError = "Lamp: " + err;
+			actionResult(id, text !== null, text !== null ? "" : friendlyError(err));
 			refreshSoon.restart();
 		});
 	}
@@ -589,8 +684,9 @@ App {
 		stage.openFullscreen(lightScreenUrl, {entityId: id});
 	}
 
-	function openAlarm(id) {
-		stage.openFullscreen(alarmScreenUrl, {entityId: id});
+	// mode: the button pressed on the alarm card when the panel needs a code (the screen asks for it)
+	function openAlarm(id, mode) {
+		stage.openFullscreen(alarmScreenUrl, {entityId: id, mode: mode || ""});
 	}
 
 	Timer {
@@ -678,6 +774,7 @@ App {
 			loading: loadingAll,
 			sortMode: sortMode,
 			systray: enableSystray,
+			areaOrder: areaOrder,
 			entities: entities,
 			areas: areaNames,
 			all: allEntities
@@ -719,6 +816,7 @@ App {
 		} else if (m.type === "save") {
 			if (m.sortMode) sortMode = m.sortMode;
 			if (m.systray !== undefined) enableSystray = m.systray === true;
+			if (m.areaOrder) areaOrder = m.areaOrder;
 			setEntities(m.entities || []);
 			sendTo(socket, JSON.stringify({type: "saved"}));
 		}

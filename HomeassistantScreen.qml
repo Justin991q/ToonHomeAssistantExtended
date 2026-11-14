@@ -1,332 +1,369 @@
 import QtQuick 2.1
 import qb.components 1.0
 
-// the chosen entities in a scrollable list: per area, by name or in your own order, all or only favourites
+// the main screen: Home Assistant's areas as tabs on the left (Favorieten first), the entities of
+// the chosen tab as cards on the right, 6 per page (swipe up/down or the arrows)
 Screen {
 	id: homeassistantScreen
 
 	screenTitle: app.appName
-	screenTitleIconUrl: app.logoUrl
+	screenTitleIconUrl: app.titleIconUrl
 
-	property int rowHeight: isNxt ? 56 : 46
-	property int fontSize: isNxt ? 20 : 16
+	property int rev: 0                       // raised on every state update: the cards re-read
+	property variant tabs: []
+	property string tabKey: ""
+	property variant pages: []                // [[id, ...], ...] 6 per page
+	property int columns: 3
+	property int rows: 3
+	property int gap: isNxt ? 14 : 10
+	property real cellWidth: (pagesView.width - (columns - 1) * gap) / columns
+	property real cellHeight: (pagesView.height - (rows - 1) * gap) / rows
 
 	onShown: {
 		addCustomTopRightButton("Instellingen");
-		app.statesUpdated.connect(updateValues);
+		app.statesUpdated.connect(onStates);
 		app.selectionChanged.connect(rebuild);
 		rebuild();
 		app.pollStates();
 	}
 	onHidden: {
-		app.statesUpdated.disconnect(updateValues);
+		app.statesUpdated.disconnect(onStates);
 		app.selectionChanged.disconnect(rebuild);
 	}
 	onCustomButtonClicked: stage.openFullscreen(app.setupScreenUrl)
 
+	function onStates() {
+		rev++;
+		// the area of an entity may have come in only now
+		var keys = tabKeys(app.tabList());
+		if (keys !== tabKeys(tabs)) rebuild();
+		else updateCounts();
+	}
+
+	function tabKeys(list) {
+		var k = [];
+		for (var i = 0; i < list.length; i++) k.push(list[i].key);
+		return k.join("|");
+	}
+
 	function rebuild() {
-		var list = app.sortedEntities(app.favouritesOnly, app.sortMode);
-		var top = listView.contentY;
-		entityModel.clear();
-		for (var i = 0; i < list.length; i++) {
-			var e = list[i];
-			entityModel.append({entityId: e.id, name: e.name, area: e.area, fav: e.fav, section: e.section,
-				value: app.stateText(e.id), on: app.isOn(e.id), action: app.actionOf(e.id), adjustable: adjustable(e.id)});
+		tabs = app.tabList();
+		var keep = false;
+		for (var i = 0; i < tabs.length; i++) if (tabs[i].key === app.currentTab) keep = true;
+		selectTab(keep ? app.currentTab : (tabs.length > 0 ? tabs[0].key : ""), true);
+		tabModel.clear();
+		for (var j = 0; j < tabs.length; j++) tabModel.append({key: tabs[j].key, label: tabs[j].label, count: app.tabOnCount(tabs[j].key)});
+	}
+
+	function updateCounts() {
+		for (var i = 0; i < tabModel.count; i++) tabModel.setProperty(i, "count", app.tabOnCount(tabModel.get(i).key));
+	}
+
+	function selectTab(key, keepPage) {
+		var keepIndex = keepPage && key === tabKey ? pagesView.currentIndex : 0;
+		tabKey = key;
+		app.currentTab = key;
+		var ids = tabs.length > 0 ? app.tabEntities(key) : [];
+		// fill pages row by row as the Flow will: a double card that does not fit on a row starts the next one
+		var list = [], page = [], row = 0, col = 0;
+		for (var i = 0; i < ids.length; i++) {
+			var w = Math.min(columns, app.cardSlots(ids[i]));
+			if (col + w > columns) { row++; col = 0; }
+			if (row >= rows) { list.push(page); page = []; row = 0; col = 0; }
+			page.push(ids[i]);
+			col += w;
 		}
-		listView.contentY = Math.min(top, Math.max(0, listView.contentHeight - listView.height));
+		if (page.length > 0) list.push(page);
+		pages = list;
+		for (var t = 0; t < tabs.length; t++) if (tabs[t].key === key) screenTitle = tabs[t].label;
+		if (tabs.length === 0) screenTitle = app.appName;
+		pagesView.positionViewAtIndex(Math.min(keepIndex, Math.max(0, list.length - 1)), ListView.Beginning);
+		pagesView.currentIndex = Math.min(keepIndex, Math.max(0, list.length - 1));
 	}
 
-	// only the values: the list stays where it is
-	function updateValues() {
-		for (var i = 0; i < entityModel.count; i++) {
-			var id = entityModel.get(i).entityId;
-			entityModel.setProperty(i, "value", app.stateText(id));
-			entityModel.setProperty(i, "on", app.isOn(id));
-			entityModel.setProperty(i, "adjustable", adjustable(id));
-		}
+	function nextPage() { pagesView.incrementCurrentIndex(); }
+	function previousPage() { pagesView.decrementCurrentIndex(); }
+
+	function showToast(message) {
+		toastText.text = message;
+		toast.opacity = 1;
+		toastTimer.restart();
 	}
 
-	// a light with brightness or colour: the row opens the light screen
-	function adjustable(id) {
-		var l = app.lightOf(id);
-		return l !== null && l !== undefined && (l.dimmable || l.color || l.colorTemp);
-	}
+	ListModel { id: tabModel }
 
-	function page(direction) {
-		var y = listView.contentY + direction * (listView.height - rowHeight);
-		listView.contentY = Math.max(0, Math.min(y, listView.contentHeight - listView.height));
-	}
-
-	ListModel { id: entityModel }
-
-	// ---- sort and filter ----
-	Row {
-		id: filterRow
-		spacing: isNxt ? 10 : 8
+	// ---- the areas ----
+	Item {
+		id: tabColumn
+		width: isNxt ? 210 : 165
+		visible: tabs.length > 0
 		anchors {
 			top: parent.top
-			topMargin: isNxt ? 14 : 10
-			left: parent.left
-			leftMargin: isNxt ? 30 : 24
-		}
-
-		Text {
-			anchors.verticalCenter: parent.verticalCenter
-			font.family: qfont.semiBold.name
-			font.pixelSize: fontSize
-			color: colors.singleLabelLeftText
-			text: "Sorteer:"
-		}
-		StandardButton {
-			text: "Per ruimte"
-			primary: app.sortMode === "area"
-			onClicked: app.setSortMode("area")
-		}
-		StandardButton {
-			text: "Op naam"
-			primary: app.sortMode === "name"
-			onClicked: app.setSortMode("name")
-		}
-		StandardButton {
-			text: "Eigen volgorde"
-			primary: app.sortMode === "own"
-			onClicked: app.setSortMode("own")
-		}
-		Item { width: isNxt ? 30 : 20; height: 1 }
-		StandardButton {
-			text: "Alleen favorieten"
-			primary: app.favouritesOnly
-			onClicked: app.setFavouritesOnly(!app.favouritesOnly)
-		}
-	}
-
-	Text {
-		anchors {
-			verticalCenter: filterRow.verticalCenter
-			right: parent.right
-			rightMargin: isNxt ? 30 : 24
-		}
-		font.family: qfont.regular.name
-		font.pixelSize: isNxt ? 15 : 12
-		color: app.connected ? colors.singleLabelLeftText : "#d0021b"
-		text: app.connected ? "Bijgewerkt " + app.lastUpdate : (app.lastError || "Geen verbinding")
-	}
-
-	// ---- the list ----
-	Rectangle {
-		id: listFrame
-		anchors {
-			top: filterRow.bottom
-			topMargin: isNxt ? 14 : 10
-			left: parent.left
-			leftMargin: isNxt ? 30 : 24
-			right: scrollButtons.left
-			rightMargin: isNxt ? 12 : 10
 			bottom: parent.bottom
-			bottomMargin: isNxt ? 14 : 10
+			left: parent.left
+			leftMargin: isNxt ? 20 : 14
+			topMargin: isNxt ? 16 : 10
+			bottomMargin: isNxt ? 16 : 10
 		}
-		color: "transparent"
-		clip: true
 
 		ListView {
-			id: listView
-			anchors.fill: parent
-			model: entityModel
-			boundsBehavior: Flickable.StopAtBounds
-			clip: true
-
-			section.property: "section"
-			section.criteria: ViewSection.FullString
-			section.delegate: Item {
-				width: listView.width
-				height: section === "" ? 0 : (isNxt ? 40 : 32)
-				visible: section !== ""
-				Text {
-					anchors {
-						left: parent.left
-						leftMargin: 4
-						bottom: parent.bottom
-						bottomMargin: 4
-					}
-					font.family: qfont.bold.name
-					font.pixelSize: isNxt ? 22 : 18
-					color: colors.singleLabelLeftText
-					text: section
-				}
+			id: tabList
+			anchors {
+				top: parent.top
+				left: parent.left
+				right: parent.right
+				bottom: statusRow.top
+				bottomMargin: 8
 			}
-
+			clip: true
+			spacing: 4
+			boundsBehavior: Flickable.StopAtBounds
+			model: tabModel
 			delegate: Rectangle {
-				id: row
-				width: listView.width
-				height: rowHeight
-				color: index % 2 === 0 ? "#ffffff" : "#f4f4f4"
-				radius: 4
-
-				MouseArea {
-					anchors.fill: parent
-					enabled: model.adjustable
-					onClicked: app.openLight(model.entityId)
-				}
+				property bool selected: model.key === homeassistantScreen.tabKey
+				width: tabList.width
+				height: isNxt ? 54 : 44
+				radius: 8
+				color: selected ? "#fde7c2" : (tabMouse.pressed ? "#ececec" : "transparent")
 
 				Image {
-					id: star
-					width: isNxt ? 30 : 24
-					height: width
-					sourceSize.width: width
-					sourceSize.height: height
-					anchors {
-						left: parent.left
-						leftMargin: isNxt ? 12 : 10
-						verticalCenter: parent.verticalCenter
-					}
-					source: model.fav ? "qrc:/images/star-on.svg" : "qrc:/images/star-off.svg"
-					MouseArea {
-						anchors.fill: parent
-						anchors.margins: -10
-						onClicked: app.toggleFavourite(model.entityId)
-					}
-				}
-
-				Column {
-					anchors {
-						left: star.right
-						leftMargin: isNxt ? 14 : 10
-						right: valueText.left
-						rightMargin: 10
-						verticalCenter: parent.verticalCenter
-					}
-					Text {
-						width: parent.width
-						elide: Text.ElideRight
-						font.family: qfont.semiBold.name
-						font.pixelSize: fontSize
-						color: "#000000"
-						text: model.name
-					}
-					Text {
-						width: parent.width
-						elide: Text.ElideRight
-						visible: app.sortMode !== "area" && model.area !== ""
-						font.family: qfont.regular.name
-						font.pixelSize: isNxt ? 14 : 12
-						color: "#808080"
-						text: model.area
-					}
-				}
-
-				Text {
-					id: valueText
-					anchors {
-						right: arrow.visible ? arrow.left : (switchButton.visible ? switchButton.left : parent.right)
-						rightMargin: isNxt ? 16 : 12
-						verticalCenter: parent.verticalCenter
-					}
-					font.family: qfont.regular.name
-					font.pixelSize: fontSize
-					color: "#404040"
-					text: model.value
-				}
-
-				Image {
-					id: arrow
-					visible: model.adjustable
+					id: starIcon
+					visible: model.key === "*fav"
 					width: isNxt ? 22 : 18
 					height: width
 					sourceSize.width: width
 					sourceSize.height: height
-					source: "qrc:/images/arrow-right.svg"
-					anchors {
-						right: switchButton.left
-						rightMargin: isNxt ? 14 : 10
-						verticalCenter: parent.verticalCenter
-					}
+					source: "qrc:/images/star-on.svg"
+					anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
 				}
-
-				// on/off pill for what toggles, a Start button for scripts, scenes and buttons
-				Rectangle {
-					id: switchButton
-					visible: model.action !== ""
-					width: isNxt ? 90 : 72
-					height: isNxt ? 38 : 30
-					radius: height / 2
+				Text {
 					anchors {
-						right: parent.right
-						rightMargin: isNxt ? 12 : 10
+						left: starIcon.visible ? starIcon.right : parent.left
+						leftMargin: starIcon.visible ? 8 : 12
+						right: countBadge.visible ? countBadge.left : parent.right
+						rightMargin: 8
 						verticalCenter: parent.verticalCenter
 					}
-					color: model.action === "toggle" ? (model.on ? "#f5a623" : "#c8c8c8") : "#4a90e2"
-
-					Rectangle {
-						visible: model.action === "toggle"
-						width: parent.height - 6
-						height: width
-						radius: width / 2
-						color: "#ffffff"
-						y: 3
-						x: model.on ? parent.width - width - 3 : 3
-						Behavior on x { NumberAnimation { duration: 120 } }
-					}
+					elide: Text.ElideRight
+					font.family: selected ? qfont.bold.name : qfont.regular.name
+					font.pixelSize: isNxt ? 19 : 15
+					color: selected ? "#7a4500" : "#3c3c3a"
+					text: model.label
+				}
+				// how many lights/switches are on here
+				Rectangle {
+					id: countBadge
+					visible: model.count > 0
+					height: isNxt ? 26 : 22
+					width: Math.max(height, countText.implicitWidth + 12)
+					radius: height / 2
+					color: "#f5a623"
+					anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
 					Text {
-						visible: model.action !== "toggle"
+						id: countText
 						anchors.centerIn: parent
 						font.family: qfont.bold.name
-						font.pixelSize: isNxt ? 16 : 13
+						font.pixelSize: isNxt ? 15 : 12
 						color: "#ffffff"
-						text: model.action === "press" ? "Druk" : (model.action === "alarm" ? "Bedien" : "Start")
+						text: model.count
 					}
-					MouseArea {
-						anchors.fill: parent
-						anchors.margins: -6
-						onClicked: app.activate(model.entityId)
-					}
+				}
+				MouseArea {
+					id: tabMouse
+					anchors.fill: parent
+					onClicked: homeassistantScreen.selectTab(model.key, false)
 				}
 			}
 		}
 
-		Text {
-			anchors.centerIn: parent
-			width: parent.width - 40
-			horizontalAlignment: Text.AlignHCenter
-			wrapMode: Text.WordWrap
-			visible: entityModel.count === 0
-			font.family: qfont.regular.name
-			font.pixelSize: fontSize
-			color: colors.singleLabelLeftText
-			text: !app.isConfigured() ? "Stel eerst Home Assistant in via Instellingen."
-				: (app.entities.length === 0 ? "Nog geen entiteiten gekozen. Kies ze via Instellingen of in de webeditor:\n" + app.webEditorUrl()
-				: "Geen favorieten. Tik op de ster bij een entiteit, of kies Alles.")
+		// connection: a dot, words only when something is wrong
+		Row {
+			id: statusRow
+			spacing: 8
+			anchors { left: parent.left; leftMargin: 12; right: parent.right; bottom: parent.bottom }
+			Rectangle {
+				width: 10
+				height: 10
+				radius: 5
+				anchors.verticalCenter: parent.verticalCenter
+				color: app.connected ? "#4caf50" : "#d0021b"
+			}
+			Text {
+				width: statusRow.width - 18
+				elide: Text.ElideRight
+				font.family: qfont.regular.name
+				font.pixelSize: isNxt ? 14 : 12
+				color: app.connected ? "#8a8a8a" : "#d0021b"
+				text: app.connected ? "Verbonden" : app.friendlyError(app.lastError || "geen verbinding")
+			}
 		}
 	}
 
-	// ---- scrolling with buttons (flicking works too) ----
+	Rectangle {
+		width: 1
+		color: "#d6d6d6"
+		visible: tabColumn.visible
+		anchors { top: tabColumn.top; bottom: tabColumn.bottom; left: tabColumn.right; leftMargin: isNxt ? 14 : 10 }
+	}
+
+	// ---- the cards, a page at a time ----
+	ListView {
+		id: pagesView
+		anchors {
+			top: parent.top
+			bottom: parent.bottom
+			left: tabColumn.visible ? tabColumn.right : parent.left
+			right: pager.left
+			leftMargin: isNxt ? 28 : 20
+			rightMargin: isNxt ? 14 : 10
+			topMargin: isNxt ? 16 : 10
+			bottomMargin: isNxt ? 16 : 10
+		}
+		clip: true
+		model: pages.length
+		orientation: ListView.Vertical
+		snapMode: ListView.SnapOneItem
+		highlightRangeMode: ListView.StrictlyEnforceRange
+		preferredHighlightBegin: 0
+		preferredHighlightEnd: height
+		highlightMoveDuration: 250
+		boundsBehavior: Flickable.StopAtBounds
+
+		delegate: Item {
+			width: pagesView.width
+			height: pagesView.height
+			property variant ids: homeassistantScreen.pages[index] || []
+
+			Flow {
+				width: pagesView.width
+				spacing: homeassistantScreen.gap
+				Repeater {
+					model: ids
+					// an ordinary card, or the double alarm card
+					Loader {
+						id: cardLoader
+						property int slots: Math.min(homeassistantScreen.columns, app.cardSlots(modelData))
+						width: slots * homeassistantScreen.cellWidth + (slots - 1) * homeassistantScreen.gap
+						height: homeassistantScreen.cellHeight
+						source: slots > 1 ? "HaAlarmCard.qml" : "HaCard.qml"
+						onLoaded: item.entityId = modelData
+						Binding { target: cardLoader.item; property: "rev"; value: homeassistantScreen.rev; when: cardLoader.status === Loader.Ready }
+						Connections {
+							target: cardLoader.item
+							ignoreUnknownSignals: true
+							onFailed: homeassistantScreen.showToast(message)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// ---- pages: arrows and dots (only with more than one page) ----
 	Column {
-		id: scrollButtons
-		spacing: isNxt ? 12 : 10
+		id: pager
+		width: isNxt ? 56 : 44
+		spacing: isNxt ? 12 : 8
 		anchors {
 			right: parent.right
-			rightMargin: isNxt ? 30 : 24
-			verticalCenter: listFrame.verticalCenter
+			rightMargin: isNxt ? 16 : 10
+			verticalCenter: pagesView.verticalCenter
 		}
+		opacity: pages.length > 1 ? 1 : 0
+
 		IconButton {
-			width: isNxt ? 60 : 48
+			width: parent.width
 			height: width
 			iconSource: "qrc:/images/arrow-up.svg"
-			enabled: listView.contentY > 0
-			onClicked: page(-1)
+			enabled: pagesView.currentIndex > 0
+			onClicked: previousPage()
 		}
-		Text {
+		Column {
 			anchors.horizontalCenter: parent.horizontalCenter
-			font.family: qfont.regular.name
-			font.pixelSize: isNxt ? 15 : 12
-			color: colors.singleLabelLeftText
-			text: entityModel.count
+			spacing: 8
+			Repeater {
+				model: pages.length
+				Rectangle {
+					width: 10
+					height: 10
+					radius: 5
+					anchors.horizontalCenter: parent.horizontalCenter
+					color: index === pagesView.currentIndex ? "#f5a623" : "#c4c4c4"
+				}
+			}
 		}
 		IconButton {
-			width: isNxt ? 60 : 48
+			width: parent.width
 			height: width
 			iconSource: "qrc:/images/arrow-down.svg"
-			enabled: listView.contentY < listView.contentHeight - listView.height - 1
-			onClicked: page(1)
+			enabled: pagesView.currentIndex < pages.length - 1
+			onClicked: nextPage()
+		}
+	}
+
+	// ---- nothing to show yet: one clear next step ----
+	Column {
+		anchors.centerIn: parent
+		width: parent.width * 0.6
+		spacing: isNxt ? 18 : 14
+		visible: tabs.length === 0
+
+		Image {
+			anchors.horizontalCenter: parent.horizontalCenter
+			width: isNxt ? 80 : 64
+			height: width
+			sourceSize.width: width
+			sourceSize.height: height
+			source: app.logoUrl
+		}
+		Text {
+			width: parent.width
+			horizontalAlignment: Text.AlignHCenter
+			font.family: qfont.bold.name
+			font.pixelSize: isNxt ? 26 : 21
+			color: "#1d1d1b"
+			text: app.isConfigured() ? "Kies je eerste lampen" : "Verbind met Home Assistant"
+		}
+		Text {
+			width: parent.width
+			horizontalAlignment: Text.AlignHCenter
+			wrapMode: Text.WordWrap
+			font.family: qfont.regular.name
+			font.pixelSize: isNxt ? 17 : 14
+			color: "#6b6b6b"
+			text: app.isConfigured() ? "Op de Toon, of makkelijker op je telefoon of computer: " + app.webEditorUrl()
+				: "Je hebt het adres van Home Assistant en een toegangstoken nodig."
+		}
+		StandardButton {
+			anchors.horizontalCenter: parent.horizontalCenter
+			primary: true
+			text: app.isConfigured() ? "Entiteiten kiezen" : "Instellen"
+			onClicked: stage.openFullscreen(app.isConfigured() ? app.entitiesScreenUrl : app.setupScreenUrl)
+		}
+	}
+
+	// ---- a short notice when a command failed ----
+	Rectangle {
+		id: toast
+		opacity: 0
+		visible: opacity > 0
+		Behavior on opacity { NumberAnimation { duration: 200 } }
+		height: isNxt ? 48 : 40
+		width: toastText.implicitWidth + 40
+		radius: height / 2
+		color: "#323232"
+		anchors { horizontalCenter: pagesView.horizontalCenter; bottom: parent.bottom; bottomMargin: isNxt ? 24 : 16 }
+		Text {
+			id: toastText
+			anchors.centerIn: parent
+			font.family: qfont.semiBold.name
+			font.pixelSize: isNxt ? 17 : 14
+			color: "#ffffff"
+		}
+		Timer {
+			id: toastTimer
+			interval: 3500
+			onTriggered: toast.opacity = 0
 		}
 	}
 }

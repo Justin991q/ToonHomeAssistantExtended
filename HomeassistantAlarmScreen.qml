@@ -24,6 +24,12 @@ Screen {
 			code = "";
 			message = "";
 		}
+		if (args && args.mode) {
+			// from a button on the alarm card: only the code is missing
+			var modes = app.alarmModes(args.entityId);
+			for (var i = 0; i < modes.length; i++) if (modes[i].mode === args.mode) message = "Voer de code in en druk op " + modes[i].label;
+			messageIsError = false;
+		}
 		screenTitle = app.displayName(entityId);
 		app.statesUpdated.connect(update);
 		update();
