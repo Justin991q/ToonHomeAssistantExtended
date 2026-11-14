@@ -697,9 +697,20 @@ App {
 		onTriggered: pollStates()
 	}
 
+	// after a command: Home Assistant's state a second later, and once more a bit after that.
+	// A lamp that fades in or out still reports its old state right away.
 	Timer {
 		id: refreshSoon
-		interval: 700
+		interval: 1000
+		onTriggered: {
+			pollStates();
+			refreshLater.restart();
+		}
+	}
+
+	Timer {
+		id: refreshLater
+		interval: 2000
 		onTriggered: pollStates()
 	}
 

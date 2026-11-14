@@ -14,3 +14,4 @@
 - Alarm panels as a double card with their buttons; with a code the alarm screen opens with the mode chosen
 - Set the order of the areas in the web editor; "Gekozen" is grouped per area
 - Screenshots in the README
+- After a command the state is fetched after 1 s and again after 3 s, so lamps that fade show the right state
