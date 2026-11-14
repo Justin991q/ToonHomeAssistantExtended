@@ -1,3 +1,10 @@
+1.1.1
+- A lamp that fades out no longer jumps back to "Aan" for a moment after you switch it off: the new state
+  is held until Home Assistant reports it (at most 6 seconds after the last tap)
+- A tap sends turn_on or turn_off as the card shows it, not toggle: off and at once on again no longer
+  switches a lamp that is still fading out off a second time
+- Web editor: the save bar no longer has the area headings of the lists on top of it
+
 1.1.0
 - Energie tab: electricity (now, today, sent back), solar panels, gas and water today, with a bar per hour;
   its own entities (Instellingen > Energie, or the web editor), today's use worked out from the meter readings

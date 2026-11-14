@@ -579,6 +579,7 @@ App {
 				map[r[0]] = {state: r[1], unit: r[2] || "", name: r[3] || "", area: r[4] || "",
 					codeFormat: r[5] || "", codeArmRequired: r[6] !== false, features: r[7] || 0, light: lightInfo(r[8]),
 					attrs: extAttrs(r[0], r[9]), changed: r[10] || 0};
+				applyHold(map, r[0]);
 			}
 			var hadWeather = false;
 			for (var w in map) if (domainOf(w) === "weather" && !forecasts[w]) hadWeather = true;
@@ -893,7 +894,9 @@ App {
 		else if (d === "lock") service = on ? "lock" : "unlock";
 		else if (d === "cover") service = on ? "close_cover" : "open_cover";
 		else if (d === "vacuum") { service = on ? "turn_off" : "turn_on"; }
-		else if (actionOf(id) === "toggle") service = "toggle";
+		// on or off as the card shows it, not "toggle": a lamp that is still fading out is "on" for Home Assistant,
+		// so off-and-at-once-on again would switch it off a second time
+		else if (actionOf(id) === "toggle") service = on ? "turn_off" : "turn_on";
 		if (!service) return;
 		if (d === "vacuum" && service === "turn_on") service = "start";
 		if (d === "vacuum" && service === "turn_off") service = "return_to_base";
@@ -902,12 +905,14 @@ App {
 		if (actionOf(id) === "toggle" && haStates[id]) {
 			var map = haStates;
 			var guess = {lock: on ? "locked" : "unlocked", cover: on ? "closing" : "opening"}[d] || (on ? "off" : "on");
+			var before = map[id].state;
 			map[id] = copyState(map[id], {state: guess});
 			haStates = map;
+			hold(id, before);
 			statesUpdated();
 		}
 		request("POST", "/api/services/" + d + "/" + service, {entity_id: id}, function(text, err) {
-			if (text === null) lastError = "Schakelen mislukt: " + err;
+			if (text === null) { lastError = "Schakelen mislukt: " + err; release(id); }
 			actionResult(id, text !== null, text !== null ? "" : friendlyError(err));
 			refreshSoon.restart();
 		});
@@ -1020,6 +1025,38 @@ App {
 	// lights: brightness, colour, colour temperature
 	// ======================================================================
 
+	// after a command the card shows the new state at once. A poll that comes in right after can still have
+	// the old state (a lamp that fades out reports "on" for a moment), or a state in between (off and at once
+	// on again: "off" for a moment). The new state is held until Home Assistant reports it, or for at most
+	// 6 seconds after the last tap. A cover or lock may skip the state we guessed ("opening"): any new state counts.
+	property var holds: ({})                  // entity id -> {entry (what the card shows), before (the old state), until}
+	property int holdMs: 6000
+
+	function hold(id, before) {
+		var h = holds;
+		var keep = h[id] && h[id].until > Date.now() ? h[id].before : before;    // quick taps: the state before the first
+		h[id] = {entry: haStates[id], before: keep, until: Date.now() + holdMs};
+		holds = h;
+	}
+
+	function release(id) {
+		var h = holds;
+		delete h[id];
+		holds = h;
+	}
+
+	// in a poll's answer: keep the held state while HA still reports the old one
+	function applyHold(map, id) {
+		var h = holds[id];
+		if (!h) return;
+		var ha = map[id].state, expected = h.entry ? h.entry.state : ha;
+		var done = Date.now() >= h.until || !h.entry
+			|| (expected !== h.before && (ha === expected || (["cover", "lock"].indexOf(domainOf(id)) >= 0 && ha !== h.before)));
+		// expected === before (a brightness or volume change, or off and on again): held until the time is up
+		if (done) release(id);
+		else map[id] = h.entry;
+	}
+
 	function copyState(s, changes) {
 		var out = {};
 		for (var k in s) out[k] = s[k];
@@ -1053,8 +1090,10 @@ App {
 	function setLightLocally(id, state, changes) {
 		if (!haStates[id] || !haStates[id].light) return;
 		var map = haStates;
+		var before = map[id].state;
 		map[id] = copyState(map[id], {state: state, light: copyState(map[id].light, changes)});
 		haStates = map;
+		hold(id, before);
 		statesUpdated();
 	}
 
@@ -1085,7 +1124,7 @@ App {
 	function lightService(id, service, data) {
 		data.entity_id = id;
 		request("POST", "/api/services/light/" + service, data, function(text, err) {
-			if (text === null) lastError = "Lamp: " + err;
+			if (text === null) { lastError = "Lamp: " + err; release(id); }
 			actionResult(id, text !== null, text !== null ? "" : friendlyError(err));
 			refreshSoon.restart();
 		});
@@ -1114,14 +1153,16 @@ App {
 			var changes = {};
 			if (localState) changes.state = localState;
 			if (localAttrs) changes.attrs = copyState(map[id].attrs || {}, localAttrs);
+			var before = map[id].state;
 			map[id] = copyState(map[id], changes);
 			haStates = map;
+			hold(id, before);
 			statesUpdated();
 		}
 		data = data || {};
 		data.entity_id = id;
 		request("POST", "/api/services/" + domain + "/" + name, data, function(text, err) {
-			if (text === null) lastError = domain + ": " + err;
+			if (text === null) { lastError = domain + ": " + err; release(id); }
 			actionResult(id, text !== null, text !== null ? "" : friendlyError(err));
 			refreshSoon.restart();
 		});
