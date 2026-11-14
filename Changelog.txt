@@ -1,4 +1,5 @@
 1.2.0
+- The original Home Assistant logo (tile, tile chooser, systray, screens, web editor)
 - Fans: a tap on the card (or the tile) opens the fan screen instead of switching the fan
 - Faster with many entities (hundreds): the list of all entities is cached on the Toon (fetched again after
   6 hours, or when you ask) and looked up by index; the web editor gets that list apart from the state and
