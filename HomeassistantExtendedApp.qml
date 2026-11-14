@@ -1565,9 +1565,12 @@ App {
 	// a camera's still image: Home Assistant's camera proxy (entity_picture holds a token), with a new
 	// number each time so it is fetched again
 	property int cameraTick: 0
-	function cameraUrl(id) {
+	// animated: a moving picture (a rain radar): not fetched again every few seconds, only when Home
+	// Assistant gives a new token in entity_picture (about every 5 minutes), and it plays in between
+	function cameraUrl(id, animated) {
 		var p = attr(id, "entity_picture");
 		if (!p) return "";
+		if (animated) return haUrl + p;
 		return haUrl + p + (p.indexOf("?") >= 0 ? "&" : "?") + "t=" + cameraTick;
 	}
 

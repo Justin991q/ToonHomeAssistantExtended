@@ -61,7 +61,9 @@ the order of the areas. A web editor makes setup easy when there are many entiti
   play/pause, next and (when there is room) volume - and +. A tap elsewhere on the card opens the speaker
   screen: big keys, a volume slider, mute, power and the source (Radio, Spotify, …).
 - **Cameras** get a double card with their still image, renewed with every poll. A tap shows it full
-  screen, renewed every 2 seconds. The image comes from Home Assistant's camera proxy.
+  screen, renewed every 2 seconds. The image comes from Home Assistant's camera proxy. A moving picture
+  (an animated GIF, such as a rain radar camera gives) plays, on the card and full screen, and is only
+  fetched again when Home Assistant gives a new camera token (about every 5 minutes).
 - **Persons** and **device trackers**: Thuis, Weg or the name of the zone, with the photo from Home
   Assistant when there is one. A tap opens a screen with "sinds 14:05", the accuracy, and a **map** with
   the location (zoom with - and +).

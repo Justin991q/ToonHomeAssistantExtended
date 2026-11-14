@@ -18,10 +18,11 @@ Rectangle {
 	clip: true
 
 	HaCameraImage {
+		id: picture
 		anchors.fill: parent
 		anchors.margins: 1
 		entityId: card.entityId
-		url: card.rev >= 0 && !card.unavailable ? app.cameraUrl(card.entityId) : ""
+		url: card.rev >= 0 && !card.unavailable ? app.cameraUrl(card.entityId, picture.animated) : ""
 	}
 
 	// name (and state) over the picture

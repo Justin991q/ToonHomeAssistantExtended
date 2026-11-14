@@ -1,7 +1,8 @@
 import QtQuick 2.1
 import qb.components 1.0
 
-// a camera: its still image as large as fits, renewed every 2 seconds while the screen is open
+// a camera: its still image as large as fits, renewed every 2 seconds while the screen is open; a moving
+// picture (a rain radar, an animated GIF) plays instead
 Screen {
 	id: cameraScreen
 
@@ -30,10 +31,12 @@ Screen {
 		radius: 8
 		clip: true
 		HaCameraImage {
+			id: picture
 			anchors.fill: parent
 			fillMode: Image.PreserveAspectFit
 			entityId: cameraScreen.entityId
 			url: {
+				if (picture.animated) return app.cameraUrl(cameraScreen.entityId, true);     // it plays; a new one with a new token
 				var u = cameraScreen.tick >= 0 ? app.cameraUrl(cameraScreen.entityId) : "";
 				return u ? u + "-" + cameraScreen.tick : "";
 			}

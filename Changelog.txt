@@ -1,4 +1,6 @@
 1.2.0
+- Cameras: a moving picture (an animated GIF, e.g. a rain radar) plays and loops, and isn't fetched again every
+  few seconds (only with a new camera token)
 - Live updates over Home Assistant's WebSocket API (subscribe_entities): changes show at once; polling only when
   the connection is down (then every pollSeconds) or every 5 minutes for names and areas
 - New tile: the first four favourites as mini cards in the main screen's style
