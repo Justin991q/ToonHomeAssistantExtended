@@ -23,8 +23,15 @@ Screen {
 	}
 	onHidden: app.statesUpdated.disconnect(update)
 
+	// the button rows are only rebuilt when they change (chipRev): a redraw would drop a tap that is going on,
+	// and other entities (a power meter every few seconds) bring updates too
+	property int chipRev: 0
+	property string chipKey: ""
+
 	function update() {
 		rev++;
+		var key = entityId + JSON.stringify([app.attr(entityId, "preset_modes"), app.haStates[entityId] ? app.haStates[entityId].features : 0]);
+		if (key !== chipKey) { chipKey = key; chipRev++; }
 		var s = app.haStates[entityId];
 		isOn = s ? s.state === "on" : false;
 		if (!speedSlider.dragging) {
@@ -118,7 +125,7 @@ Screen {
 				height: chipFlow.height
 				property string kind: modelData.kind
 				property variant chips: {
-					if (rev < 0) return [];
+					if (chipRev < 0) return [];
 					if (kind === "preset") {
 						var list = app.fanSupports(entityId, "preset") ? (app.attr(entityId, "preset_modes") || []) : [];
 						var out = [];

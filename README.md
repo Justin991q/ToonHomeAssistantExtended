@@ -114,7 +114,8 @@ the order of the areas. A web editor makes setup easy when there are many entiti
 |---|---|
 | ![The Energie tab](screenshots/energy.png) | ![Choosing the energy entities on the Toon](screenshots/energy-settings.png) |
 
-- **A tile** with your first four favourites as mini cards (icon, name, state; warm yellow when on), in the
+- **A tile** with four entities as mini cards (your choice under *Instellingen > Tegel* or in the web
+  editor, in your order; nothing chosen: your first four favourites) (icon, name, state; warm yellow when on), in the
   main screen's style. A tap on a mini card does what the card does (switch, run, open its screen); the rest
   of the tile opens the main screen.
 - **The Home Assistant icon in the systray** (optional, in *Instellingen* or the web editor). A tap
@@ -165,6 +166,7 @@ In the web editor you can:
   area (drag them by ⠿, or ▲▼, or sort by name or favourites first): that's the order of the cards on the Toon;
 - set the **order of the areas** (drag an area by the ⠿ before its name, or ▲▼; *Overig* too): that's the order of the tabs on
   the Toon. *Ruimtes zoals in Home Assistant* goes back to Home Assistant's order (Overig last);
+- choose what the **tile** shows (*Op de tegel*: four lists; nothing chosen = the favourites);
 - choose the tab the Toon **opens on** (*Op de Toon openen op*): the last one you used, Favorieten, Energie,
   an area or Overig. On the Toon: *Openen op* on the settings screen (each tap the next choice);
 - choose the entities of the **Energie** tab (a list per part, only entities with a fitting unit);
@@ -239,6 +241,7 @@ can't send). For another map, put its tile address in the settings file as `"map
 | `HomeassistantCameraScreen.qml` | a camera, full screen |
 | `HomeassistantPersonScreen.qml` | a person or device tracker, with the map |
 | `HomeassistantEnergySetupScreen.qml` | the Energie tab's entities, on the Toon |
+| `HomeassistantTileSetupScreen.qml` | what the tile shows, on the Toon |
 | `HaMediaCard.qml`, `HaCameraCard.qml`, `HaWeatherCard.qml` | the double cards of a speaker, camera and the weather |
 | `HaEnergyView.qml`, `HaBarChart.qml` | the Energie tab and its bars per hour |
 | `HaCameraImage.qml` | a camera image that renews without flicker |
@@ -251,7 +254,7 @@ can't send). For another map, put its tile address in the settings file as `"map
 | `screenshots/` | the pictures in this README (from the simulator, Toon 2) |
 
 Settings: `/mnt/data/tsc/homeassistantExtended.userSettings.json` (`url`, `token`, `entities: [{id, name, fav}]`,
-`areaOrder` (`""` is Overig), `defaultTab`, `energy: {power, usage, export, solarPower, solar, gas, water, priceUsage,
+`areaOrder` (`""` is Overig), `defaultTab`, `tileEntities`, `energy: {power, usage, export, solarPower, solar, gas, water, priceUsage,
 priceExport, priceGas, priceWater}` (lists of entity ids),
 `enableSystray`, `pollSeconds`, `webPort`, `mapTileUrl`). The cached list of all entities:
 `/mnt/data/tsc/homeassistantExtended.entities.json`.

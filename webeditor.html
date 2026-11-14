@@ -38,6 +38,7 @@ main { max-width: 1280px; margin: 0 auto; padding: 16px; display: grid; gap: 16p
 .echip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .echip button { border: none; background: none; padding: 0 6px; }
 .efield select { width: 100%; }
+.tilepick select { flex: 1 1 140px; min-width: 0; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
 label.f { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); flex: 1; min-width: 220px; }
 input[type=text], input[type=password], input[type=search], select {
@@ -205,6 +206,10 @@ body.dragging-on, body.dragging-on * { cursor: grabbing !important; user-select:
 			<label class="f" style="flex-direction:row;align-items:center;gap:8px;min-width:0">Op de Toon openen op
 				<select id="defaultTab" style="flex:1"></select></label>
 		</div>
+		<div class="row tilepick">
+			<span style="font-size:13px;color:var(--muted)">Op de tegel:</span>
+			<select data-tile="0"></select><select data-tile="1"></select><select data-tile="2"></select><select data-tile="3"></select>
+		</div>
 		<div class="list" id="selList"></div>
 	</section>
 
@@ -237,6 +242,7 @@ let pendingConnMsg = "";
 let failures = 0;
 let areaOrder = [];       // working copy of your area order ("" = Overig)
 let defaultTab = "*last"; // working copy: the tab the Toon opens on
+let tileEntities = [];    // working copy: what the tile shows (empty: the favourites)
 let view = null;          // phones: the part shown (chosen, add, energy, conn)
 let energy = {};          // working copy of the Energie tab's entities: {power: [ids], usage: [...], ...}
 
@@ -315,6 +321,7 @@ function onState(m) {
 	if (!dirty) $("systray").checked = !!m.systray;
 	if (!dirty) areaOrder = (m.areaOrder || []).slice();
 	if (!dirty) defaultTab = typeof m.defaultTab === "string" ? m.defaultTab : "*last";
+	if (!dirty) tileEntities = (m.tileEntities || []).slice();
 	if (view === null) setView(!m.url || !m.hasToken ? "conn" : (m.entities.length ? "chosen" : "add"));   // the first message: where to start
 	if (!dirty) chosen = m.entities.map(e => ({id: e.id, name: e.name || "", fav: !!e.fav}));
 	if (!dirty) energy = JSON.parse(JSON.stringify(m.energy || {}));
@@ -344,7 +351,22 @@ function fillFilters() {
 }
 
 // ---- rendering ----
-function render() { renderAll(); renderChosen(); renderEnergy(); renderDefaultTab(); }
+function render() { renderAll(); renderChosen(); renderEnergy(); renderDefaultTab(); renderTilePick(); }
+
+// the tile: four choices from the chosen entities; nothing chosen = the favourites
+function renderTilePick() {
+	if (!server) return;
+	const all = byId();
+	const label = (c) => c.name || (all[c.id] || {}).name || c.id;
+	const kept = tileEntities.filter(id => chosen.some(c => c.id === id));
+	document.querySelectorAll("[data-tile]").forEach(sel => {
+		const k = +sel.dataset.tile, cur = kept[k] || "";
+		const opts = chosen.filter(c => c.id === cur || !kept.includes(c.id));
+		sel.innerHTML = `<option value="">${k === 0 ? "– de favorieten –" : "–"}</option>` + opts.map(c => `<option value="${esc(c.id)}">${esc(label(c))}</option>`).join("");
+		sel.value = cur;
+		sel.disabled = k > kept.length;
+	});
+}
 
 // the choices: "last one", Favorieten, Energie, the areas in your order, Overig (as the Toon's tabs, with this page's changes)
 function renderDefaultTab() {
@@ -593,8 +615,16 @@ $("favFirst").onclick = () => sortChosen((a, b) => (b.fav ? 1 : 0) - (a.fav ? 1 
 
 $("systray").addEventListener("change", markDirty);
 $("defaultTab").addEventListener("change", (ev) => { defaultTab = ev.target.value; markDirty(); });
+document.querySelector(".tilepick").addEventListener("change", (ev) => {
+	const k = ev.target.dataset.tile;
+	if (k === undefined) return;
+	const kept = tileEntities.filter(id => chosen.some(c => c.id === id));
+	if (ev.target.value) kept[+k] = ev.target.value; else kept.splice(+k, 1);
+	tileEntities = kept.filter(Boolean).slice(0, 4);
+	markDirty(); renderTilePick();
+});
 $("areaReset").onclick = () => { areaOrder = []; markDirty(); render(); };
-$("saveBtn").onclick = () => send({type: "save", systray: $("systray").checked, areaOrder: areaOrder, defaultTab: defaultTab, energy: energy, entities: chosen.map(c => ({id: c.id, name: c.name.trim(), fav: c.fav}))});
+$("saveBtn").onclick = () => send({type: "save", systray: $("systray").checked, areaOrder: areaOrder, defaultTab: defaultTab, tileEntities: tileEntities, energy: energy, entities: chosen.map(c => ({id: c.id, name: c.name.trim(), fav: c.fav}))});
 $("undoBtn").onclick = () => { dirty = false; updateSavebar(); onState(server); };
 $("clearCacheBtn").onclick = () => {
 	try { localStorage.removeItem(CACHE_KEY); } catch (e) {}

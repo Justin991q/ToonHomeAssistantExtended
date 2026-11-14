@@ -44,6 +44,8 @@ App {
 	property url cameraScreenUrl: "HomeassistantCameraScreen.qml"
 	property HomeassistantPersonScreen homeassistantPersonScreen
 	property url personScreenUrl: "HomeassistantPersonScreen.qml"
+	property HomeassistantTileSetupScreen homeassistantTileSetupScreen
+	property url tileSetupScreenUrl: "HomeassistantTileSetupScreen.qml"
 	property HomeassistantEnergySetupScreen homeassistantEnergySetupScreen
 	property url energySetupScreenUrl: "HomeassistantEnergySetupScreen.qml"
 
@@ -67,6 +69,7 @@ App {
 	property bool enableSystray: false        // the Home Assistant icon in the systray (top of the screen)
 	property variant areaOrder: []            // your order of the areas (web editor); areas not in it follow in HA's order. "" is Overig
 	property string defaultTab: "*last"       // the tab the main screen opens on: "*last" (the last one), "*fav", "*energy", an area, "" (Overig)
+	property variant tileEntities: []         // what the tile shows (at most 4, in this order); empty: the favourites
 	// the Energie tab: its own entities, apart from the cards. Every field is a list (summed: e.g. the
 	// two tariffs of a smart meter, or the three phases)
 	property variant energy: ({})             // {power, usage, export, solarPower, solar, gas, water}: [entity ids]
@@ -121,6 +124,7 @@ App {
 		registry.registerWidget("screen", cameraScreenUrl, this, "homeassistantCameraScreen");
 		registry.registerWidget("screen", personScreenUrl, this, "homeassistantPersonScreen");
 		registry.registerWidget("screen", energySetupScreenUrl, this, "homeassistantEnergySetupScreen");
+		registry.registerWidget("screen", tileSetupScreenUrl, this, "homeassistantTileSetupScreen");
 		registry.registerWidget("systrayIcon", trayUrl, this, "homeassistantTray");
 	}
 
@@ -162,6 +166,7 @@ App {
 			enableSystray = s.enableSystray === true;
 			areaOrder = s.areaOrder || [];
 			if (typeof s.defaultTab === "string") defaultTab = s.defaultTab;
+			tileEntities = cleanTile(s.tileEntities || []);
 			energy = cleanEnergy(s.energy || {});
 			if (s.mapTileUrl) mapTileUrl = s.mapTileUrl;
 			if (s.webPort > 0) webPort = s.webPort;
@@ -181,6 +186,7 @@ App {
 			enableSystray: enableSystray,
 			areaOrder: areaOrder,
 			defaultTab: defaultTab,
+			tileEntities: tileEntities,
 			energy: energy,
 			mapTileUrl: mapTileUrl,
 			webPort: webPort
@@ -507,6 +513,29 @@ App {
 		if (err === "geen verbinding") return "Geen verbinding met Home Assistant";
 		if (err === "token ongeldig (401)") return "Home Assistant weigert het token";
 		return "Dat lukte niet (" + err + ")";
+	}
+
+	property int tileMax: 4
+
+	function cleanTile(list) {
+		var out = [];
+		for (var i = 0; i < list.length && out.length < tileMax; i++) if (list[i] && out.indexOf(String(list[i])) < 0) out.push(String(list[i]));
+		return out;
+	}
+
+	function setTileEntities(list) {
+		tileEntities = cleanTile(list);
+		saveSettings();
+		selectionChanged();
+		broadcastState();
+	}
+
+	// what the tile shows: your choice (those still chosen), else the favourites, else the first chosen ones
+	function tileList() {
+		var out = [];
+		for (var i = 0; i < tileEntities.length; i++) if (isSelected(tileEntities[i])) out.push(tileEntities[i]);
+		if (out.length > 0) return out;
+		return favouriteList().slice(0, tileMax);
 	}
 
 	function favouriteList() {
@@ -1928,6 +1957,7 @@ App {
 			areaOrder: areaOrder,
 			defaultTab: defaultTab,
 			tabs: defaultTabChoices(),
+			tileEntities: tileEntities,
 			energy: energy,
 			energyFields: energyFields(),
 			entities: entities,
@@ -1995,6 +2025,7 @@ App {
 			if (m.systray !== undefined) enableSystray = m.systray === true;
 			if (m.areaOrder) areaOrder = m.areaOrder;
 			if (typeof m.defaultTab === "string") defaultTab = m.defaultTab;
+			if (m.tileEntities) tileEntities = cleanTile(m.tileEntities);
 			if (m.energy) {
 				energy = cleanEnergy(m.energy);
 				energyHistory = {};

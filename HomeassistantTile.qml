@@ -1,7 +1,7 @@
 import QtQuick 2.1
 import qb.components 1.0
 
-// the favourites as 2x2 mini cards (no favourites: the first chosen entities), in the main screen's style:
+// up to four entities as 2x2 mini cards (chosen under Instellingen > Tegel, else the favourites), in the main screen's style:
 // icon, name, state, warm yellow when on. A tap on a card does what the card on the main screen does
 // (switch, run, open); the rest of the tile opens the main screen.
 Tile {
@@ -25,8 +25,7 @@ Tile {
 	}
 
 	function update() {
-		var list = app.favouriteList();
-		ids = list.slice(0, 4);
+		ids = app.tileList();
 		rev++;
 	}
 

@@ -120,6 +120,19 @@ Screen {
 		onClicked: test()
 	}
 
+	// what the tile shows
+	StandardButton {
+		id: tileButton
+		text: app.tileEntities.length > 0 ? "Tegel (" + app.tileEntities.length + ")" : "Tegel"
+		enabled: app.isConfigured() && app.entities.length > 0
+		anchors {
+			verticalCenter: testButton.verticalCenter
+			left: defaultTabButton.right
+			leftMargin: 16
+		}
+		onClicked: stage.openFullscreen(app.tileSetupScreenUrl)
+	}
+
 	// the tab the main screen opens on: each tap the next choice
 	StandardButton {
 		id: defaultTabButton

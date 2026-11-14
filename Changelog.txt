@@ -1,4 +1,7 @@
 1.2.0
+- Choose what the tile shows (up to four, in your order): Instellingen > Tegel, or the web editor; else the favourites
+- Buttons on the alarm, thermostat and fan screens are only rebuilt when they change (a tap is no longer lost
+  while other entities update)
 - Binary sensors (motion, a door contact) light up while on; the toggle icon shows off (knob left) and on (right)
 - Energie: yesterday up to this time (and yesterday's hours behind today's), today's costs with price entities
   (worked out per hour), and a Stroomprijs panel with today's price per hour (dynamic contracts) and the cheapest hour

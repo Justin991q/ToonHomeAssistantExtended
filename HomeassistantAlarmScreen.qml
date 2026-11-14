@@ -42,12 +42,20 @@ Screen {
 
 	function update() {
 		var s = app.haStates[entityId];
+		var was = alarmState;
 		alarmState = s ? s.state : "";
+		// the new state is in (with live updates often before the command's answer): the buttons work again
+		if (busy && alarmState !== was) busy = false;
 		codeFormat = app.alarmCodeFormat(entityId);
+		// the buttons only rebuilt when they change: a redraw would drop a tap that is going on
 		var modes = app.alarmModes(entityId);
+		var key = entityId + JSON.stringify(modes);
+		if (key === modesKey) return;
+		modesKey = key;
 		modeModel.clear();
 		for (var i = 0; i < modes.length; i++) modeModel.append(modes[i]);
 	}
+	property string modesKey: ""
 
 	function stateColor() {
 		if (alarmState === "triggered") return "#d0021b";

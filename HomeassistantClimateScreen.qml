@@ -37,8 +37,14 @@ Screen {
 
 	function num(v, fallback) { return typeof v === "number" ? v : fallback; }
 
+	// the button rows are only rebuilt when they change (chipRev): a redraw would drop a tap that is going on
+	property int chipRev: 0
+	property string chipKey: ""
+
 	function update() {
 		rev++;
+		var key = entityId + JSON.stringify([app.attr(entityId, "hvac_modes"), app.attr(entityId, "preset_modes"), app.attr(entityId, "available_modes")]);
+		if (key !== chipKey) { chipKey = key; chipRev++; }
 		var s = app.haStates[entityId];
 		haState = s ? s.state : "";
 		if (humidifier) {
@@ -85,7 +91,7 @@ Screen {
 
 	// the mode buttons: [{value, label}] and which one is on
 	function modeList() {
-		if (rev < 0) return [];
+		if (chipRev < 0) return [];
 		if (humidifier) return [{value: "off", label: "Uit"}, {value: "on", label: "Aan"}];
 		var modes = app.attr(entityId, "hvac_modes") || [];
 		var out = [];
@@ -93,7 +99,7 @@ Screen {
 		return out;
 	}
 	function presetList() {
-		if (rev < 0) return [];
+		if (chipRev < 0) return [];
 		var list = app.attr(entityId, humidifier ? "available_modes" : "preset_modes") || [];
 		var out = [];
 		for (var i = 0; i < list.length; i++) out.push({value: list[i], label: app.presetText(list[i])});
