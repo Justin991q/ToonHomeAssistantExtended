@@ -1,3 +1,10 @@
+1.2.2
+- Main screen: under the connection when data last came in from Home Assistant ("bijgewerkt 10:42")
+- README: how the caching works
+- Live updates: a connection that dies without closing (a sleeping computer, a router restart) is noticed: a ping
+  every 30 seconds, and when nothing comes back a poll at once and a new connection. A poll that differs from what
+  live said counts, and live connects again. Before, "Verbonden · live" could stay on while nothing came in
+
 1.2.1
 - Code: readable names instead of one- and two-letter variables (QML and web editor)
 - Motion sensors (device_class motion): someone moving when on, crossed out when off (as mdi:motion-sensor / -off)

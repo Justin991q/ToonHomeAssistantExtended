@@ -18,7 +18,9 @@ the order of the areas. A web editor makes setup easy when there are many entiti
   - **Sensors** show their value in large text: "21,4 °C", "350 W".
   - Each type has its own icon: lamp, plug, thermometer, blinds, shield, …
   - A small dot at the bottom left shows the connection ("Verbonden · live" with live updates). Words
-    about a problem only appear when something is wrong.
+    about a problem only appear when something is wrong. Under it, when data last came in from Home
+    Assistant ("bijgewerkt 10:42", with the date when it wasn't today); with a live connection that moves on
+    with every update Home Assistant sends.
   - **Live**: a change in Home Assistant (a lamp switched with its own switch, a sensor's new value) shows
     on the Toon at once.
 
@@ -174,12 +176,8 @@ In the web editor you can:
 
 Press **Opslaan op Toon** to save. The Toon updates right away.
 
-**Many entities:** the list of all Home Assistant entities (often hundreds) is big. The Toon keeps it in
-`homeassistantExtended.entities.json` and fetches it again after 6 hours, when you open *Entiteiten kiezen*
-with a list older than an hour, or with ⟳ in the web editor. The web editor gets the list once and keeps it
-in the browser; after that the Toon only sends the small state (which entities you chose, the connection).
-**Cache wissen** (on the Toon's settings screen, and in the web editor under Verbinding) forgets the list on
-the Toon and in the browser and fetches it again: handy after renaming or moving entities in Home Assistant.
+**Many entities:** the list of all entities is kept on the Toon and in your browser, so the page stays quick
+with hundreds of them. See [Caching](#caching), also for **Cache wissen**.
 
 If port 8137 is already in use, add `"webPort": 8140` (or any free port) to the settings file and restart
 the GUI. The app writes the port into the published page.
@@ -195,22 +193,27 @@ https): the app logs in with the token and subscribes to the chosen entities and
 `subscribe_entities` (Home Assistant 2022.4 or newer). Home Assistant then sends every change at once. When the
 connection drops, the app polls every `pollSeconds` and connects again (after 2, 4, 8 … seconds, at most a
 minute). With an older Home Assistant it only polls. While live, it still polls every 5 minutes (names, areas).
+A connection can also die without closing (a computer that sleeps, a router restart): the app sends a `ping`
+every 30 seconds; when nothing comes back it polls at once and connects again. A poll that differs from what live
+said also counts as a dead connection.
 
 Everything else goes over the REST API, with the token as a `Bearer` header:
 - `GET /api/` for the connection test;
-- `POST /api/template` to get all entities with their area and Home Assistant's area list (when choosing,
-  and every 30 minutes). It also fetches the states of the chosen entities in **one small request**
+- `POST /api/template` to get all entities with their area and Home Assistant's area list (see
+  [Caching](#caching) for when). It also fetches the states of the chosen entities in **one small request**
   every 10 seconds when there are no live updates (`pollSeconds` in the settings), with the alarm attributes `code_format`,
   `code_arm_required` and `supported_features`, for lights `brightness`, `supported_color_modes`,
   `hs_color`, `color_temp_kelvin` and its range, and the attributes a thermostat, humidifier, speaker,
   camera, person or weather card needs;
 - `POST /api/services/weather/get_forecasts?return_response` for the forecast (every 30 minutes;
   Home Assistant 2024.x or newer);
-- `GET /api/history/period/<midnight>?filter_entity_id=…&minimal_response&no_attributes` for the Energie
-  tab's meter readings since midnight (every 5 minutes);
+- `GET /api/history/period/<start>?end_time=<now>&filter_entity_id=…&minimal_response&no_attributes` for the
+  Energie tab's meter readings and prices (since yesterday midnight once, then only the new ones every 5 minutes;
+  without `end_time` Home Assistant gives only one day from the start);
 - `GET /api/camera_proxy/<camera>?token=…` for camera images, and the photos and album art Home Assistant
   gives in `entity_picture` (these carry their own token);
-- `POST /api/services/<domain>/<service>` to switch (e.g. `light/toggle`, `light/turn_on` with
+- `POST /api/services/<domain>/<service>` to switch (e.g. `light/turn_on` / `light/turn_off` as the card shows
+  it, not `toggle`, `light/turn_on` with
   `brightness_pct`, `hs_color` or `color_temp_kelvin`, `scene/turn_on`,
   `alarm_control_panel/alarm_arm_away` with `code`, `climate/set_temperature`, `climate/set_hvac_mode`,
   `climate/set_preset_mode`, `humidifier/set_humidity`, `media_player/media_play_pause`,
@@ -221,6 +224,40 @@ Everything else goes over the REST API, with the token as a `Bearer` header:
 refuse an app like this one (their tile usage policy wants an identifying User-Agent, which a QML image
 can't send). For another map, put its tile address in the settings file as `"mapTileUrl"`, with `{z}`,
 `{x}` and `{y}`, and restart the GUI.
+
+## Caching
+
+The app keeps a few things so the Toon (a slow computer) and your network don't do the same work again and
+again. What it keeps, where, and when it is renewed:
+
+| What | Where | Renewed | Why |
+|---|---|---|---|
+| The list of **all entities** of Home Assistant (id, name, area, state, unit) and the area list | memory, and the file `/mnt/data/tsc/homeassistantExtended.entities.json` | after 6 hours; when you open *Entiteiten kiezen* or *Energie instellen* with a list older than an hour; with ⟳ in the web editor; with **Cache wissen** | often hundreds of entities: about 50–100 kB, too much to fetch at every start or send at every change |
+| The same list in the **web editor** | your browser (`localStorage`) | when the Toon's list has another version (the time it was fetched) | the Toon sends it once instead of with every message |
+| The **energy history** (meter readings and prices per hour) | memory | in full at the start, on a new day and after changing the Energie settings; else every 5 minutes only the readings since the last time | a meter that reports every few seconds has thousands of readings a day |
+| A **moving camera picture** (an animated GIF, e.g. a rain radar) | memory (its frames) | only when Home Assistant gives a new camera token (about every 5 minutes) | a radar GIF can be a megabyte; a still camera picture is fetched again every poll / every 2 seconds full screen |
+| The **weather forecast** | memory | every 30 minutes | it changes slowly |
+
+**Not kept:** the states of your entities. They come live (or from a poll) and are always Home Assistant's
+current ones. The token is only kept in the settings file; the web editor never gets it back.
+
+**How the entity list works**
+- At a start the app reads the file. When it belongs to the same Home Assistant (the address in it) and is
+  younger than 6 hours, Home Assistant isn't asked for the list at all; else it is fetched in the background.
+- The app also builds an index (entity id → entry), so a name or an area is looked up at once instead of by
+  walking the whole list (that made the chooser slow with many entities).
+- The cards don't depend on this list: their names and areas come with the states. The list is for choosing
+  (the chooser, the web editor, the energy settings) and as a fallback for a name or area.
+
+**How the web editor's copy works**
+- The Toon's state message (which entities you chose, the connection, …) carries `allVersion`: the time the
+  list was fetched. It is small (about 3 kB).
+- When the browser's copy has another version, the page asks for the list (`{"type": "entities", "version": …}`);
+  the Toon sends it, or only `"same": true` when the page already has it. The page keeps it in `localStorage`.
+
+**Cache wissen** (on the Toon: *Instellingen*; in the web editor: under Verbinding) empties the file, the
+memory and the browser's copy, and fetches the list again. Use it when a name or an area you changed in Home
+Assistant doesn't show in the chooser yet. You don't need it for states: those are never cached.
 
 ## Files
 

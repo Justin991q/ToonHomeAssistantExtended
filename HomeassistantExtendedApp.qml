@@ -89,6 +89,7 @@ App {
 	property bool connected: false
 	property string lastError: ""
 	property string lastUpdate: ""
+	property double lastDataTime: 0            // when data last came in from Home Assistant (a poll, a live update), ms
 	property bool loadingAll: false
 
 	// ---- web editor ----
@@ -674,6 +675,7 @@ App {
 			var keep = {}, wanted = pollIds();
 			for (var index = 0; index < wanted.length; index++) keep[wanted[index]] = true;
 			var map = {};
+			var liveIsStale = false;
 			for (var known in haStates) if (keep[known]) map[known] = haStates[known];
 			for (var j = 0; j < list.length; j++) {
 				var row = list[j];
@@ -682,9 +684,15 @@ App {
 					codeFormat: row[5] || "", codeArmRequired: row[6] !== false, features: row[7] || 0, light: lightInfo(row[8]),
 					attrs: extAttrs(row[0], row[9]), changed: row[10] || 0};
 				if (liveConnected && liveRaw[row[0]] && map[row[0]]) {
-					// live is newer than a poll's answer: only the area (live doesn't send it)
-					map[row[0]] = copyState(map[row[0]], {area: polled.area});
-					continue;
+					var heldNow = holds[row[0]] && holds[row[0]].until > Date.now();
+					if (polled.state === map[row[0]].state || heldNow) {
+						// live is newer than a poll's answer: only the area (live doesn't send it)
+						map[row[0]] = copyState(map[row[0]], {area: polled.area});
+						continue;
+					}
+					// Home Assistant says otherwise than live did: the live connection may be dead without knowing
+					// it (a sleeping computer, a router restart). The poll counts, live connects again
+					liveIsStale = true;
 				}
 				map[row[0]] = polled;
 				applyHold(map, row[0]);
@@ -692,12 +700,14 @@ App {
 			var hadWeather = false;
 			for (var id in map) if (domainOf(id) === "weather" && !forecasts[id]) hadWeather = true;
 			haStates = map;
+			if (liveIsStale) liveRestart("a poll differs from the live states");
 			connected = true;
 			lastError = "";
 			cameraTick++;
 			var now = new Date();
 			if (!toonAddress) toonAddress = findToonAddress();   // the Toon may have had no address or connection at the start
 			lastUpdate = ("0" + now.getHours()).slice(-2) + ":" + ("0" + now.getMinutes()).slice(-2) + ":" + ("0" + now.getSeconds()).slice(-2);
+			lastDataTime = now.getTime();
 			statesUpdated();
 			if (hadWeather) loadForecasts();
 		});
@@ -735,6 +745,14 @@ App {
 		haSocket.active = false;
 		haSocket.url = liveUrl();
 		haSocket.active = true;
+		liveLoginTimeout.restart();
+	}
+
+	// connected, but no login within 15 seconds (a connection that is dead from the start): again
+	Timer {
+		id: liveLoginTimeout
+		interval: 15000
+		onTriggered: if (haSocket.active && !liveConnected && !liveFailed) liveRestart("no login")
 	}
 
 	function liveStop() {
@@ -766,6 +784,7 @@ App {
 	function liveMessage(text) {
 		var message;
 		try { message = JSON.parse(text); } catch (error) { return; }
+		liveLastMessage = Date.now();
 		if (message.type === "auth_required") {
 			liveSend({type: "auth", access_token: haToken});
 		} else if (message.type === "auth_ok") {
@@ -823,6 +842,7 @@ App {
 			}
 		}
 		liveRaw = raw;
+		lastDataTime = Date.now();                      // also when nothing visible changed: the data is current
 		if (changed.length === 0) return;
 		var map = haStates;
 		var newWeather = false, any = false;
@@ -879,6 +899,34 @@ App {
 	}
 
 	Timer { id: liveReconnect; onTriggered: liveStart() }
+
+	// a connection can die without the socket noticing (a sleeping computer, a router or Wi-Fi gone for a
+	// moment): then "live" would stay on while nothing comes in. So a ping every liveHeartbeatMs; when
+	// nothing at all came back for a while, the connection counts as dead: a poll at once, and connect again
+	property double liveLastMessage: 0
+	property int liveHeartbeatMs: 30000
+
+	Timer {
+		id: liveHeartbeat
+		interval: liveHeartbeatMs
+		repeat: true
+		running: liveConnected
+		onTriggered: {
+			if (Date.now() - liveLastMessage > liveHeartbeatMs * 2.5) liveRestart("no answer to the pings");
+			else liveSend({id: liveMsgId++, type: "ping"});
+		}
+	}
+
+	function liveRestart(reason) {
+		console.log("homeassistant: live connection again (" + reason + ")");
+		liveConnected = false;
+		liveSubId = 0;
+		liveSubKey = "";
+		haSocket.active = false;
+		liveReconnect.interval = 1000;
+		liveReconnect.restart();
+		pollStates();
+	}
 
 	Timer {
 		// camera images: renewed as often as a poll would (live updates don't change the picture)
@@ -1843,6 +1891,15 @@ App {
 		if (!path) return "";
 		if (animated) return haUrl + path;
 		return haUrl + path + (path.indexOf("?") >= 0 ? "&" : "?") + "t=" + cameraTick;
+	}
+
+	// "bijgewerkt 10:42" (today) / "bijgewerkt 14-11 10:42": when data last came in; "" before the first
+	function lastDataText() {
+		if (!lastDataTime) return "";
+		var dataTime = new Date(lastDataTime), now = new Date();
+		var clockTime = pad2(dataTime.getHours()) + ":" + pad2(dataTime.getMinutes());
+		var dayPart = dataTime.toDateString() === now.toDateString() ? "" : dataTime.getDate() + "-" + (dataTime.getMonth() + 1) + " ";
+		return (connected ? "bijgewerkt " : "laatst bijgewerkt ") + dayPart + clockTime;
 	}
 
 	// "sinds 14:05" / "sinds gisteren" for a person's state

@@ -112,7 +112,7 @@ Screen {
 				top: parent.top
 				left: parent.left
 				right: parent.right
-				bottom: statusRow.top
+				bottom: statusColumn.top
 				bottomMargin: 8
 			}
 			clip: true
@@ -176,25 +176,40 @@ Screen {
 			}
 		}
 
-		// connection: a dot, words only when something is wrong
-		Row {
-			id: statusRow
-			spacing: 8
+		// connection: a dot, words only when something is wrong; under it when data last came in
+		Column {
+			id: statusColumn
+			spacing: 2
 			anchors { left: parent.left; leftMargin: 12; right: parent.right; bottom: parent.bottom }
-			Rectangle {
-				width: 10
-				height: 10
-				radius: 5
-				anchors.verticalCenter: parent.verticalCenter
-				color: app.connected ? "#4caf50" : "#d0021b"
+			Row {
+				id: statusRow
+				spacing: 8
+				width: parent.width
+				Rectangle {
+					width: 10
+					height: 10
+					radius: 5
+					anchors.verticalCenter: parent.verticalCenter
+					color: app.connected ? "#4caf50" : "#d0021b"
+				}
+				Text {
+					width: statusRow.width - 18
+					elide: Text.ElideRight
+					font.family: qfont.regular.name
+					font.pixelSize: isNxt ? 14 : 12
+					color: app.connected ? "#8a8a8a" : "#d0021b"
+					text: app.connected ? (app.liveConnected ? "Verbonden · live" : "Verbonden") : app.friendlyError(app.lastError || "geen verbinding")
+				}
 			}
 			Text {
-				width: statusRow.width - 18
+				visible: text !== ""
+				x: 18                                       // under the words, past the dot
+				width: statusColumn.width - 18
 				elide: Text.ElideRight
 				font.family: qfont.regular.name
-				font.pixelSize: isNxt ? 14 : 12
-				color: app.connected ? "#8a8a8a" : "#d0021b"
-				text: app.connected ? (app.liveConnected ? "Verbonden · live" : "Verbonden") : app.friendlyError(app.lastError || "geen verbinding")
+				font.pixelSize: isNxt ? 13 : 11
+				color: "#a0a0a0"
+				text: app.lastDataText()
 			}
 		}
 	}
