@@ -22,8 +22,8 @@ Screen {
 
 	function toggle(id) {
 		var list = app.tileEntities.slice(0);
-		var i = list.indexOf(id);
-		if (i >= 0) list.splice(i, 1);
+		var position = list.indexOf(id);
+		if (position >= 0) list.splice(position, 1);
 		else if (list.length < app.tileMax) list.push(id);
 		else return;
 		app.setTileEntities(list);

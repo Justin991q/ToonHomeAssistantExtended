@@ -296,7 +296,7 @@ function connect() {
 		else if (message.type === "saved") { dirty = false; updateSavebar(); setStatus("opgeslagen op Toon"); }
 	};
 }
-function send(obj) { if (socket && socket.readyState === 1) socket.send(JSON.stringify(obj)); }
+function send(payload) { if (socket && socket.readyState === 1) socket.send(JSON.stringify(payload)); }
 function setStatus(text, ok) {
 	$("status").textContent = text;
 	if (ok !== undefined) $("dot").classList.toggle("on", ok);
@@ -333,7 +333,7 @@ function onState(message) {
 let byIdMap = {}, byIdOf = null;
 const byId = () => { if (byIdOf !== allList) { byIdMap = {}; allList.forEach(entity => byIdMap[entity.id] = entity); byIdOf = allList; } return byIdMap; };   // made once per list
 const isChosen = (id) => chosen.some(choice => choice.id === id);
-const areaRank = (area) => { const own = areaOrder.indexOf(area || ""); if (own >= 0) return own; if (!area) return 1e6; const i = server.areas.indexOf(area); return i >= 0 ? 1000 + i : 5e5; };   // "" = Overig
+const areaRank = (area) => { const own = areaOrder.indexOf(area || ""); if (own >= 0) return own; if (!area) return 1e6; const areaIndex = server.areas.indexOf(area); return areaIndex >= 0 ? 1000 + areaIndex : 5e5; };   // "" = Overig
 const esc = (value) => String(value == null ? "" : value).replace(/[&<>"']/g, character => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[character]));
 function markDirty() { dirty = true; updateSavebar(); }
 function updateSavebar() { $("savebar").classList.toggle("show", dirty); }
@@ -423,10 +423,10 @@ function renderAll() {
 // the chosen entities per area (HA's order), each area in your own order: as the Toon's tabs show them
 function chosenGroups() {
 	const all = byId(), groups = {}, order = [];
-	chosen.forEach((choice, i) => {
+	chosen.forEach((choice, chosenIndex) => {
 		const area = (all[choice.id] || {}).area || "";
 		if (!groups[area]) { groups[area] = []; order.push(area); }
-		groups[area].push(i);
+		groups[area].push(chosenIndex);
 	});
 	order.sort((first, second) => areaRank(first) - areaRank(second) || first.localeCompare(second));
 	return order.map(area => ({area, rows: groups[area]}));
@@ -443,18 +443,18 @@ function renderChosen() {
 			<button class="icon" data-amove="${index}:-1" ${index === 0 ? "disabled" : ""} title="Ruimte omhoog">▲</button>
 			<button class="icon" data-amove="${index}:1" ${index === groups.length - 1 ? "disabled" : ""} title="Ruimte omlaag">▼</button></span>`;
 		return `<div class="area" data-group="${index}"><span><span class="grip" data-grip="area:${index}" title="Sleep om de ruimte te verplaatsen">⠿</span>${esc(group.area || "Overig")} <small style="cursor:default">${group.rows.length}</small></span>${moves}</div>` +
-		group.rows.map((i, position) => {
-			const choice = chosen[i], entity = all[choice.id] || {};
-			return `<div class="ent sub" data-row="${i}" data-group="${index}">
-			<span class="grip" data-grip="row:${i}" title="Sleep om te verplaatsen (binnen ${esc(group.area || "Overig")})">⠿</span>
-			<button class="star${choice.fav ? " on" : ""}" data-fav="${i}" title="Favoriet (op de tegel en het tabblad Favorieten)">${choice.fav ? "★" : "☆"}</button>
+		group.rows.map((chosenIndex, position) => {
+			const choice = chosen[chosenIndex], entity = all[choice.id] || {};
+			return `<div class="ent sub" data-row="${chosenIndex}" data-group="${index}">
+			<span class="grip" data-grip="row:${chosenIndex}" title="Sleep om te verplaatsen (binnen ${esc(group.area || "Overig")})">⠿</span>
+			<button class="star${choice.fav ? " on" : ""}" data-fav="${chosenIndex}" title="Favoriet (op de tegel en het tabblad Favorieten)">${choice.fav ? "★" : "☆"}</button>
 			<div class="info">
-				<input type="text" class="rename" data-name="${i}" value="${esc(choice.name)}" placeholder="${esc(entity.name || choice.id)}" style="width:100%">
+				<input type="text" class="rename" data-name="${chosenIndex}" value="${esc(choice.name)}" placeholder="${esc(entity.name || choice.id)}" style="width:100%">
 				<div class="id">${esc(choice.id)}</div>
 			</div>
-			<span class="acts"><span class="moves"><button class="icon" data-move="${i}:-1" ${position === 0 ? "disabled" : ""} title="Omhoog binnen ${esc(group.area || "Overig")}">▲</button>
-			<button class="icon" data-move="${i}:1" ${position === group.rows.length - 1 ? "disabled" : ""} title="Omlaag binnen ${esc(group.area || "Overig")}">▼</button></span>
-			<button class="icon rm" data-remove="${i}" title="Verwijderen">✕</button></span>
+			<span class="acts"><span class="moves"><button class="icon" data-move="${chosenIndex}:-1" ${position === 0 ? "disabled" : ""} title="Omhoog binnen ${esc(group.area || "Overig")}">▲</button>
+			<button class="icon" data-move="${chosenIndex}:1" ${position === group.rows.length - 1 ? "disabled" : ""} title="Omlaag binnen ${esc(group.area || "Overig")}">▼</button></span>
+			<button class="icon rm" data-remove="${chosenIndex}" title="Verwijderen">✕</button></span>
 		</div>`;
 		}).join("");
 	}).join("") || '<div class="empty">Nog niets gekozen.<br><br><button class="primary" data-goto="add">Entiteiten toevoegen</button></div>';
@@ -493,18 +493,18 @@ $("selList").addEventListener("click", (event) => {
 	else if (button.dataset.remove !== undefined) chosen.splice(+button.dataset.remove, 1);
 	else if (button.dataset.move) {
 		// swap with the neighbour in the same area: the order of the cards on the Toon
-		const [i, direction] = button.dataset.move.split(":").map(Number);
-		const rows = chosenGroups().find(group => group.rows.includes(i)).rows;
-		const j = rows[rows.indexOf(i) + direction];
-		if (j === undefined) return;
-		[chosen[i], chosen[j]] = [chosen[j], chosen[i]];
+		const [chosenIndex, direction] = button.dataset.move.split(":").map(Number);
+		const rows = chosenGroups().find(group => group.rows.includes(chosenIndex)).rows;
+		const neighbourIndex = rows[rows.indexOf(chosenIndex) + direction];
+		if (neighbourIndex === undefined) return;
+		[chosen[chosenIndex], chosen[neighbourIndex]] = [chosen[neighbourIndex], chosen[chosenIndex]];
 	} else return;
 	markDirty(); render();
 });
 $("selList").addEventListener("input", (event) => {
-	const i = event.target.dataset.name;
-	if (i === undefined) return;
-	chosen[+i].name = event.target.value;
+	const chosenIndex = event.target.dataset.name;
+	if (chosenIndex === undefined) return;
+	chosen[+chosenIndex].name = event.target.value;
 	markDirty();
 });
 ["search", "areaSel", "domainSel", "onlySel"].forEach(id => $(id).addEventListener("input", renderAll));
@@ -518,7 +518,7 @@ $("efields").addEventListener("click", (event) => {
 	const button = event.target.closest("button");
 	if (!button || !button.dataset.eremove) return;
 	const [key, id] = button.dataset.eremove.split("|");
-	energy[key] = (energy[key] || []).filter(x => x !== id);
+	energy[key] = (energy[key] || []).filter(otherId => otherId !== id);
 	markDirty(); renderEnergy();
 });
 
@@ -639,7 +639,7 @@ $("testBtn").onclick = () => { setConnMsg("testen…"); send({type: "test", url:
 $("connBtn").onclick = () => {
 	send({type: "connection", url: $("url").value.trim(), token: $("token").value.trim()});
 	$("token").value = "";
-	setConnMsg("opgeslagen, entiteiten worden opgehaald…", true);
+	setConnMsg("opslaan…");      // the app answers with the new state, or with why it refused
 };
 window.addEventListener("beforeunload", (event) => { if (dirty) { event.preventDefault(); event.returnValue = ""; } });
 

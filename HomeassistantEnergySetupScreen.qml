@@ -9,7 +9,7 @@ Screen {
 
 	screenTitle: "Energie instellen"
 
-	property variant fields: app.energyFields()
+	property variant fields: app.energyData.energyFields()
 	property int fieldIndex: 0
 	property int rev: 0
 	property variant candidates: []
@@ -30,8 +30,8 @@ Screen {
 		var field = fields[fieldIndex];
 		var chosen = app.energy[field.key] || [];
 		var out = [];
-		for (var i = 0; i < app.allEntities.length; i++) {
-			var entity = app.allEntities[i];
+		for (var index = 0; index < app.allEntities.length; index++) {
+			var entity = app.allEntities[index];
 			if (field.units.indexOf(entity.unit) < 0 && chosen.indexOf(entity.id) < 0) continue;
 			out.push({id: entity.id, name: entity.name || entity.id, state: entity.state, unit: entity.unit, chosen: chosen.indexOf(entity.id) >= 0});
 		}
@@ -53,9 +53,9 @@ Screen {
 	function toggle(id) {
 		var key = fields[fieldIndex].key;
 		var list = (app.energy[key] || []).slice(0);
-		var i = list.indexOf(id);
-		if (i >= 0) list.splice(i, 1); else list.push(id);
-		app.setEnergyField(key, list);
+		var position = list.indexOf(id);
+		if (position >= 0) list.splice(position, 1); else list.push(id);
+		app.energyData.setEnergyField(key, list);
 	}
 
 	// ---- the parts ----

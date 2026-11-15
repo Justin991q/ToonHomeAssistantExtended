@@ -26,8 +26,8 @@ Rectangle {
 		var out = [];
 		var now = new Date().getTime();
 		var days = ["zo", "ma", "di", "wo", "do", "vr", "za"];
-		for (var i = 0; i < forecast.length && out.length < maxColumns; i++) {
-			var item = forecast[i];
+		for (var index = 0; index < forecast.length && out.length < maxColumns; index++) {
+			var item = forecast[index];
 			if (item.daily) {
 				var day = new Date(item.time);
 				if (day.toDateString() === new Date().toDateString()) continue;   // today is on the left
@@ -79,8 +79,8 @@ Rectangle {
 				text: {
 					if (card.rev < 0) return "";
 					var parts = [];
-					var hum = app.attr(card.entityId, "humidity"), wind = app.attr(card.entityId, "wind_speed");
-					if (typeof hum === "number") parts.push(Math.round(hum) + "%");
+					var currentHumidity = app.attr(card.entityId, "humidity"), wind = app.attr(card.entityId, "wind_speed");
+					if (typeof currentHumidity === "number") parts.push(Math.round(currentHumidity) + "%");
 					if (typeof wind === "number") parts.push(Math.round(wind) + " " + (app.attr(card.entityId, "wind_speed_unit") || "km/h"));
 					return parts.length > 0 ? parts.join(" · ") : app.displayName(card.entityId);
 				}

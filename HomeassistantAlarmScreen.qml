@@ -27,7 +27,7 @@ Screen {
 		if (args && args.mode) {
 			// from a button on the alarm card: only the code is missing
 			var modes = app.alarmModes(args.entityId);
-			for (var i = 0; i < modes.length; i++) if (modes[i].mode === args.mode) message = "Voer de code in en druk op " + modes[i].label;
+			for (var index = 0; index < modes.length; index++) if (modes[index].mode === args.mode) message = "Voer de code in en druk op " + modes[index].label;
 			messageIsError = false;
 		}
 		screenTitle = app.displayName(entityId);
@@ -42,10 +42,10 @@ Screen {
 
 	function update() {
 		var entry = app.haStates[entityId];
-		var was = alarmState;
+		var wasLive = alarmState;
 		alarmState = entry ? entry.state : "";
 		// the new state is in (with live updates often before the command's answer): the buttons work again
-		if (busy && alarmState !== was) busy = false;
+		if (busy && alarmState !== wasLive) busy = false;
 		codeFormat = app.alarmCodeFormat(entityId);
 		// the buttons only rebuilt when they change: a redraw would drop a tap that is going on
 		var modes = app.alarmModes(entityId);
@@ -53,7 +53,7 @@ Screen {
 		if (key === modesKey) return;
 		modesKey = key;
 		modeModel.clear();
-		for (var i = 0; i < modes.length; i++) modeModel.append(modes[i]);
+		for (var index = 0; index < modes.length; index++) modeModel.append(modes[index]);
 	}
 	property string modesKey: ""
 
@@ -75,10 +75,10 @@ Screen {
 		busy = true;
 		message = label + "…";
 		messageIsError = false;
-		app.alarmCommand(entityId, mode, codeFormat ? code : "", function(ok, err) {
+		app.alarmCommand(entityId, mode, codeFormat ? code : "", function(ok, errorText) {
 			busy = false;
 			code = "";
-			message = ok ? label + ": verstuurd" : err;
+			message = ok ? label + ": verstuurd" : errorText;
 			messageIsError = !ok;
 		});
 	}

@@ -25,7 +25,7 @@ Item {
 
 	function maxOf(list) {
 		var highest = 0;
-		for (var i = 0; list && i < list.length; i++) if (list[i] > highest) highest = list[i];
+		for (var index = 0; list && index < list.length; index++) if (list[index] > highest) highest = list[index];
 		return highest;
 	}
 

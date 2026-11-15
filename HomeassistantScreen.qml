@@ -41,22 +41,22 @@ Screen {
 	}
 
 	function tabKeys(list) {
-		var k = [];
-		for (var i = 0; i < list.length; i++) k.push(list[i].key);
-		return k.join("|");
+		var keys = [];
+		for (var index = 0; index < list.length; index++) keys.push(list[index].key);
+		return keys.join("|");
 	}
 
 	function rebuild() {
 		tabs = app.tabList();
 		var keep = false;
-		for (var i = 0; i < tabs.length; i++) if (tabs[i].key === app.currentTab) keep = true;
+		for (var index = 0; index < tabs.length; index++) if (tabs[index].key === app.currentTab) keep = true;
 		selectTab(keep ? app.currentTab : (tabs.length > 0 ? tabs[0].key : ""), true);
 		tabModel.clear();
-		for (var j = 0; j < tabs.length; j++) tabModel.append({key: tabs[j].key, label: tabs[j].label, count: app.tabOnCount(tabs[j].key)});
+		for (var tabIndex = 0; tabIndex < tabs.length; tabIndex++) tabModel.append({key: tabs[tabIndex].key, label: tabs[tabIndex].label, count: app.tabOnCount(tabs[tabIndex].key)});
 	}
 
 	function updateCounts() {
-		for (var i = 0; i < tabModel.count; i++) tabModel.setProperty(i, "count", app.tabOnCount(tabModel.get(i).key));
+		for (var index = 0; index < tabModel.count; index++) tabModel.setProperty(index, "count", app.tabOnCount(tabModel.get(index).key));
 	}
 
 	function selectTab(key, keepPage) {
@@ -66,11 +66,11 @@ Screen {
 		var ids = tabs.length > 0 ? app.tabEntities(key) : [];
 		// fill pages row by row as the Flow will: a double card that does not fit on a row starts the next one
 		var list = [], page = [], row = 0, col = 0;
-		for (var i = 0; i < ids.length; i++) {
-			var slots = Math.min(columns, app.cardSlots(ids[i]));
+		for (var index = 0; index < ids.length; index++) {
+			var slots = Math.min(columns, app.cardSlots(ids[index]));
 			if (col + slots > columns) { row++; col = 0; }
 			if (row >= rows) { list.push(page); page = []; row = 0; col = 0; }
-			page.push(ids[i]);
+			page.push(ids[index]);
 			col += slots;
 		}
 		if (page.length > 0) list.push(page);

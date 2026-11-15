@@ -20,8 +20,8 @@ SystrayIcon {
 
 	function update() {
 		var triggered = false;
-		for (var i = 0; i < app.entities.length; i++) {
-			var entry = app.haStates[app.entities[i].id];
+		for (var index = 0; index < app.entities.length; index++) {
+			var entry = app.haStates[app.entities[index].id];
 			if (entry && entry.state === "triggered") triggered = true;
 		}
 		alarmTriggered = triggered;

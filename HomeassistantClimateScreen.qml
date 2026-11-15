@@ -1,7 +1,8 @@
 import QtQuick 2.1
 import qb.components 1.0
 
-// a thermostat (climate) or a humidifier: the value now, the target with - and +, the mode and the presets.
+// a thermostat (climate), a humidifier or a water heater (boiler): the value now, the target with - and +,
+// the mode and the presets (a water heater: its way of heating).
 // - and + only change the screen; the target goes to Home Assistant a moment after the last tap.
 Screen {
 	id: climateScreen
@@ -10,6 +11,7 @@ Screen {
 
 	property string entityId: ""
 	property bool humidifier: entityId.indexOf("humidifier.") === 0
+	property bool waterHeater: entityId.indexOf("water_heater.") === 0
 	property int rev: 0
 	property string haState: ""
 	// the target(s) on the screen: one, or low/high for a range (heat_cool)
@@ -43,7 +45,8 @@ Screen {
 
 	function update() {
 		rev++;
-		var key = entityId + JSON.stringify([app.attr(entityId, "hvac_modes"), app.attr(entityId, "preset_modes"), app.attr(entityId, "available_modes")]);
+		var key = entityId + JSON.stringify([app.attr(entityId, "hvac_modes"), app.attr(entityId, "preset_modes"), app.attr(entityId, "available_modes"),
+			app.attr(entityId, "operation_list")]);
 		if (key !== chipKey) { chipKey = key; chipRev++; }
 		var entry = app.haStates[entityId];
 		haState = entry ? entry.state : "";
@@ -54,7 +57,7 @@ Screen {
 		} else {
 			minValue = num(app.attr(entityId, "min_temp"), 7);
 			maxValue = num(app.attr(entityId, "max_temp"), 35);
-			step = num(app.attr(entityId, "target_temp_step"), 0.5);
+			step = num(app.attr(entityId, "target_temp_step"), waterHeater ? 1 : 0.5);
 		}
 		if (editing) return;
 		var targetNow = app.attr(entityId, humidifier ? "humidity" : "temperature");
@@ -83,6 +86,7 @@ Screen {
 
 	function send() {
 		if (humidifier) app.humidifierSetHumidity(entityId, target);
+		else if (waterHeater) app.waterHeaterSetTemperature(entityId, target);
 		else if (range) app.climateSetRange(entityId, low, high);
 		else app.climateSetTemperature(entityId, target);
 	}
@@ -93,22 +97,26 @@ Screen {
 	function modeList() {
 		if (chipRev < 0) return [];
 		if (humidifier) return [{value: "off", label: "Uit"}, {value: "on", label: "Aan"}];
-		var modes = app.attr(entityId, "hvac_modes") || [];
+		var modes = app.attr(entityId, waterHeater ? "operation_list" : "hvac_modes") || [];
 		var out = [];
-		for (var i = 0; i < modes.length; i++) out.push({value: modes[i], label: app.hvacModeText(modes[i])});
+		for (var modeIndex = 0; modeIndex < modes.length; modeIndex++) {
+			out.push({value: modes[modeIndex], label: waterHeater ? app.waterHeaterModeText(modes[modeIndex]) : app.hvacModeText(modes[modeIndex])});
+		}
 		return out;
 	}
 	function presetList() {
 		if (chipRev < 0) return [];
+		if (waterHeater) return [];
 		var list = app.attr(entityId, humidifier ? "available_modes" : "preset_modes") || [];
 		var out = [];
-		for (var i = 0; i < list.length; i++) out.push({value: list[i], label: app.presetText(list[i])});
+		for (var presetIndex = 0; presetIndex < list.length; presetIndex++) out.push({value: list[presetIndex], label: app.presetText(list[presetIndex])});
 		return out;
 	}
 	function currentPreset() { return rev >= 0 ? (app.attr(entityId, humidifier ? "mode" : "preset_mode") || "") : ""; }
 
 	function pickMode(mode) {
 		if (humidifier) app.humidifierPower(entityId, mode === "on");
+		else if (waterHeater) app.waterHeaterSetMode(entityId, mode);
 		else app.climateSetMode(entityId, mode);
 	}
 	function pickPreset(preset) {
@@ -146,6 +154,7 @@ Screen {
 			text: {
 				if (rev < 0) return "";
 				if (humidifier) return haState === "on" ? (app.attr(entityId, "action") === "humidifying" ? "Bevochtigt" : (app.attr(entityId, "action") === "drying" ? "Droogt" : "Aan")) : "Uit";
+				if (waterHeater) return app.waterHeaterModeText(haState);
 				var action = app.hvacActionText(app.attr(entityId, "hvac_action"));
 				return action ? action.charAt(0).toUpperCase() + action.substring(1) : app.hvacModeText(haState);
 			}

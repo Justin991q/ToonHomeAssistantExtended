@@ -42,9 +42,9 @@ Screen {
 	function test() {
 		testResult = "Testen…";
 		testOk = false;
-		app.testConnection(tempUrl, tempToken, function(ok, msg) {
+		app.testConnection(tempUrl, tempToken, function(ok, messageText) {
 			testOk = ok;
-			testResult = ok ? "Verbonden: " + msg : msg;
+			testResult = ok ? "Verbonden: " + messageText : messageText;
 		});
 	}
 
@@ -147,7 +147,7 @@ Screen {
 		onClicked: {
 			var list = app.defaultTabChoices();
 			var position = 0;
-			for (var i = 0; i < list.length; i++) if (list[i].key === app.defaultTab) position = i;
+			for (var index = 0; index < list.length; index++) if (list[index].key === app.defaultTab) position = index;
 			app.setDefaultTab(list[(position + 1) % list.length].key);
 			rev++;
 		}
@@ -218,7 +218,7 @@ Screen {
 	// the Energie tab has entities of its own
 	StandardButton {
 		id: energyButton
-		text: app.energyConfigured() ? "Energie (" + app.energyIds().length + ")" : "Energie instellen"
+		text: app.energyData.energyConfigured() ? "Energie (" + app.energyData.energyIds().length + ")" : "Energie instellen"
 		enabled: app.isConfigured()
 		anchors {
 			verticalCenter: chooseButton.verticalCenter

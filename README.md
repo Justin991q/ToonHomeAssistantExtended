@@ -12,9 +12,23 @@ the order of the areas. A web editor makes setup easy when there are many entiti
   in your order, **Overig** (entities without an area) last. The number next to an area is how many
   lights and switches are on there. On the right are the cards of that area, 9 per page. Swipe or use the
   arrows; the dots show the page.
-  - **Tap a card** to switch it (light, switch, fan, cover, lock, …), run it (scene, script) or
-    press it (button). It lights up in warm yellow when on, and pulses briefly until Home Assistant
-    answers. If the command fails, the card goes back and a short notice appears at the bottom.
+  - **Tap a card** to switch it (light, switch, fan, cover, lock, valve, group, …), run it (scene, script),
+    or press it (button). It lights up in warm yellow when on, and pulses briefly
+    until Home Assistant answers. If the command fails, the card goes back and a short notice appears at the bottom.
+  - **A lock that unlocks, a garage door or gate that opens** (covers with device class `garage`, `gate` or
+    `door`) asks first: "Voordeurslot ontgrendelen?". One stray tap on the Toon or its tile doesn't open the
+    house. Locking and closing go at once.
+  - **Numbers and choices**: a tap on a `number` / `input_number` opens its screen with - and + in the
+    entity's own steps, and as Home Assistant shows it: a slider (mode `slider` or `auto`), or a button to
+    type the value on the Toon's keyboard (mode `box`). A `select` / `input_select` shows its options as
+    buttons. A **counter** has the same screen: - and + count by the counter's own step, **Reset** puts it
+    back to its initial value, and a count can be typed.
+  - **Water heaters** (`water_heater`) show their temperature and open the thermostat's screen: the target
+    with - and +, and the way of heating (eco, electric, …).
+  - **Timers** say "Loopt tot 10:42" or "Pauze · 4:32 over". A tap opens the timer's screen: the time left,
+    counting down, and **Start**, **Pauze**, **Afronden** (ends it as if its time was up) and **Annuleren**.
+  - A sensor with a time (device class
+    `timestamp`) says "10:42", "morgen 07:30" or "14-11 10:42", not the raw text.
   - **Sensors** show their value in large text: "21,4 °C", "350 W".
   - Each type has its own icon: lamp, plug, thermometer, blinds, shield, …
   - A small dot at the bottom left shows the connection ("Verbonden · live" with live updates). Words
@@ -183,8 +197,10 @@ If port 8137 is already in use, add `"webPort": 8140` (or any free port) to the 
 the GUI. The app writes the port into the published page.
 
 **Security:** anyone on your network who can reach the Toon can open the web editor and change the
-selection or the connection. They can't read the token. This is the same trust level as the Toon's other
-local pages.
+selection or the connection. They can't read the token: the page never gets it, and the app uses the saved
+token only for the saved address. Testing or saving another address from the web editor needs the token
+typed in again (on the Toon itself another address keeps the token). This is the same trust level as the
+Toon's other local pages.
 
 ## How it talks to Home Assistant
 
@@ -218,7 +234,17 @@ Everything else goes over the REST API, with the token as a `Bearer` header:
   `alarm_control_panel/alarm_arm_away` with `code`, `climate/set_temperature`, `climate/set_hvac_mode`,
   `climate/set_preset_mode`, `humidifier/set_humidity`, `media_player/media_play_pause`,
   `media_player/volume_set`, `media_player/select_source`, `fan/set_percentage`, `fan/set_preset_mode`,
-  `fan/oscillate`, `fan/set_direction`).
+  `fan/oscillate`, `fan/set_direction`, `valve/open_valve`, `timer/start` / `pause` / `finish` / `cancel`,
+  `number/set_value`, `counter/increment` / `decrement` / `reset` / `set_value`, `select/select_option`, `water_heater/set_temperature`; an old-style `group` has no
+  services of its own and goes through `homeassistant/turn_on` / `turn_off`).
+
+With live updates a poll still goes out every 5 minutes (names, areas), and it checks the live connection:
+when Home Assistant's `last_updated` of an entity is newer than what live brought, live missed something and
+connects again. A sensor that changes every second differs from a poll's answer all the time; by the time
+of the state, not its value, that is no reason to connect again.
+
+Ticks, stars and names you change on the Toon show at once; the settings file is written 2 seconds after
+the last tap (one write to the Toon's flash for a row of ticks), the states are fetched once after it.
 
 **The map** on the person screen uses Esri's World Street Map tiles. OpenStreetMap's own tile servers
 refuse an app like this one (their tile usage policy wants an identifying User-Agent, which a QML image
@@ -263,7 +289,9 @@ Assistant doesn't show in the chooser yet. You don't need it for states: those a
 
 | File | What |
 |---|---|
-| `HomeassistantExtendedApp.qml` | settings, Home Assistant client, polling, alarm commands, web editor server |
+| `HomeassistantExtendedApp.qml` | settings, Home Assistant client, polling, the state texts, the commands, web editor server |
+| `HaLive.qml` | live updates: Home Assistant's WebSocket API (created inside the app, `app.live`) |
+| `HaEnergy.qml` | the Energie tab's history, prices and costs (created inside the app, `app.energyData`) |
 | `HomeassistantTile.qml` | the tile: four favourites as mini cards |
 | `HomeassistantScreen.qml` | the main screen: area tabs and pages of cards |
 | `HaCard.qml` | a card: icon, name, state, tap feedback |
@@ -272,7 +300,9 @@ Assistant doesn't show in the chooser yet. You don't need it for states: those a
 | `HomeassistantEntitiesScreen.qml` | the entity chooser on the Toon |
 | `HomeassistantAlarmScreen.qml` | an alarm panel with keypad |
 | `HomeassistantLightScreen.qml` | a light: brightness, colour, colour temperature |
-| `HomeassistantClimateScreen.qml` | a thermostat or humidifier: target, mode, presets |
+| `HomeassistantClimateScreen.qml` | a thermostat, humidifier or water heater: target, mode, presets |
+| `HomeassistantInputScreen.qml` | a number (slider or box), a counter or a choice (its options) |
+| `HomeassistantTimerScreen.qml` | a timer: the time left, start, pause, finish, cancel |
 | `HomeassistantFanScreen.qml` | a fan: speed, presets, oscillation, direction |
 | `HomeassistantMediaScreen.qml` | a speaker: keys, volume, power, source |
 | `HomeassistantCameraScreen.qml` | a camera, full screen |
@@ -305,6 +335,7 @@ against a fake Home Assistant: connection test, choosing/renaming/favourites, so
 the main screen (tabs, pages, value cards, tapping a card, the notice after a failed command), the empty
 screen, the tile, the systray option, alarm panels (the card and the screen) with and without a code,
 light brightness, colour and colour temperature, fans, thermostats and humidifiers, speakers, weather, cameras,
-persons with the map, the Energie tab (today's totals from the history, its settings, the web editor), the
+persons with the map, groups, the question before a lock or garage door opens, valves, timers, numbers
+(box and slider), choices, water heaters, taps saved together, the Energie tab (today's totals from the history, its settings, the web editor), the
 entity list cache, and the live updates (the fake Home Assistant has a WebSocket API too: pushes, a dropped
 connection, polling meanwhile, connecting again).

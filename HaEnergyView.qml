@@ -44,17 +44,17 @@ Item {
 			if (dearest < 0 || prices[hour] > prices[dearest]) dearest = hour;
 		}
 		if (cheapest < 0 || prices[cheapest] === prices[dearest]) return "";
-		return "goedkoopst " + app.pad2(cheapest) + ":00 " + app.euro(prices[cheapest]) + (view.compact ? "" : " · duurst " + app.pad2(dearest) + ":00 " + app.euro(prices[dearest]));
+		return "goedkoopst " + app.pad2(cheapest) + ":00 " + app.energyData.euro(prices[cheapest]) + (view.compact ? "" : " · duurst " + app.pad2(dearest) + ":00 " + app.energyData.euro(prices[dearest]));
 	}
 
 	function positive(list) {
 		var out = [];
-		for (var i = 0; list && i < list.length; i++) out.push(list[i] > 0 ? list[i] : 0);
+		for (var index = 0; list && index < list.length; index++) out.push(list[index] > 0 ? list[index] : 0);
 		return out;
 	}
 	function negative(list) {
 		var out = [], any = false;
-		for (var i = 0; list && i < list.length; i++) { out.push(list[i] < 0 ? -list[i] : 0); if (list[i] < 0) any = true; }
+		for (var index = 0; list && index < list.length; index++) { out.push(list[index] < 0 ? -list[index] : 0); if (list[index] < 0) any = true; }
 		return any ? out : [];
 	}
 
@@ -70,12 +70,12 @@ Item {
 				// the meter field for the total, the power field for "now"
 				property string totalKey: key === "electricity" ? "usage" : key
 				property string nowKey: key === "electricity" ? "power" : (key === "solar" ? "solarPower" : "")
-				property variant today: view.rev >= 0 && !isPrice ? app.energyToday(totalKey) : null
-				property variant yesterday: view.rev >= 0 && !isPrice ? app.energyYesterday(totalKey) : null
-				property variant sentBack: view.rev >= 0 && key === "electricity" ? app.energyToday("export") : null
-				property variant now: view.rev >= 0 && nowKey !== "" ? app.energyNow(nowKey) : null
-				property variant cost: view.rev >= 0 && (key === "electricity" || key === "gas" || key === "water") ? app.energyCost(key) : null
-				property variant prices: view.rev >= 0 && isPrice ? app.priceToday("priceUsage") : null
+				property variant today: view.rev >= 0 && !isPrice ? app.energyData.energyToday(totalKey) : null
+				property variant yesterday: view.rev >= 0 && !isPrice ? app.energyData.energyYesterday(totalKey) : null
+				property variant sentBack: view.rev >= 0 && key === "electricity" ? app.energyData.energyToday("export") : null
+				property variant now: view.rev >= 0 && nowKey !== "" ? app.energyData.energyNow(nowKey) : null
+				property variant cost: view.rev >= 0 && (key === "electricity" || key === "gas" || key === "water") ? app.energyData.energyCost(key) : null
+				property variant prices: view.rev >= 0 && isPrice ? app.energyData.priceToday("priceUsage") : null
 
 				width: (view.width - (view.columns - 1) * view.gap) / view.columns
 				height: (view.height - (view.rows - 1) * view.gap) / view.rows
@@ -112,8 +112,8 @@ Item {
 						var prefix = view.compact ? "" : "Nu ";              // narrow: just the number, so the title fits
 						if (panel.isPrice) return view.compact ? "/kWh" : "per kWh";
 						if (panel.now === null) return "";
-						if (panel.key === "electricity" && panel.now < 0) return prefix + app.energyNumber(-panel.now, panel.nowKey) + " terug";
-						return prefix + app.energyNumber(panel.now, panel.nowKey);
+						if (panel.key === "electricity" && panel.now < 0) return prefix + app.energyData.energyNumber(-panel.now, panel.nowKey) + " terug";
+						return prefix + app.energyData.energyNumber(panel.now, panel.nowKey);
 					}
 				}
 
@@ -129,9 +129,9 @@ Item {
 							font.pixelSize: view.compact ? (isNxt ? 24 : 19) : (isNxt ? 28 : 22)
 							color: "#1d1d1b"
 							text: {
-								if (panel.isPrice) return app.euro(app.priceNow("priceUsage"), 3).replace(/0$/, "");
-								if (panel.today !== null) return app.energyNumber(panel.today.total, panel.totalKey);
-								return panel.now !== null && !view.has(panel.totalKey) ? app.energyNumber(panel.now, panel.nowKey) : "-";
+								if (panel.isPrice) return app.energyData.euro(app.energyData.priceNow("priceUsage"), 3).replace(/0$/, "");
+								if (panel.today !== null) return app.energyData.energyNumber(panel.today.total, panel.totalKey);
+								return panel.now !== null && !view.has(panel.totalKey) ? app.energyData.energyNumber(panel.now, panel.nowKey) : "-";
 							}
 						}
 						// today's costs, next to the total
@@ -141,7 +141,7 @@ Item {
 							font.family: qfont.semiBold.name
 							font.pixelSize: isNxt ? 17 : 14
 							color: panel.cost !== null && panel.cost < 0 ? "#3b7d16" : "#6b6b6b"
-							text: panel.cost !== null ? app.euro(panel.cost) : ""
+							text: panel.cost !== null ? app.energyData.euro(panel.cost) : ""
 						}
 					}
 					Text {
@@ -153,7 +153,7 @@ Item {
 						text: {
 							if (panel.isPrice) return view.priceSummary(panel.prices) || "nu";
 							var line = view.has(panel.totalKey) ? (panel.key === "solar" ? "opgewekt vandaag" : "vandaag") : "nu";
-							if (panel.sentBack !== null) line += " · " + app.energyNumber(panel.sentBack.total, "export") + (view.compact ? " terug" : " teruggeleverd");
+							if (panel.sentBack !== null) line += " · " + app.energyData.energyNumber(panel.sentBack.total, "export") + (view.compact ? " terug" : " teruggeleverd");
 							return line;
 						}
 					}
@@ -165,8 +165,8 @@ Item {
 						font.family: qfont.regular.name
 						font.pixelSize: isNxt ? 14 : 12
 						color: "#9a9a9a"
-						text: panel.yesterday !== null ? "gisteren tot nu " + app.energyNumber(panel.yesterday.sameTime, panel.totalKey)
-							+ (view.compact ? "" : " (hele dag " + app.energyNumber(panel.yesterday.total, panel.totalKey) + ")") : ""
+						text: panel.yesterday !== null ? "gisteren tot nu " + app.energyData.energyNumber(panel.yesterday.sameTime, panel.totalKey)
+							+ (view.compact ? "" : " (hele dag " + app.energyData.energyNumber(panel.yesterday.total, panel.totalKey) + ")") : ""
 					}
 				}
 

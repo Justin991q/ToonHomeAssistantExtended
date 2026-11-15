@@ -129,7 +129,7 @@ Screen {
 					if (kind === "preset") {
 						var list = app.fanSupports(entityId, "preset") ? (app.attr(entityId, "preset_modes") || []) : [];
 						var out = [];
-						for (var i = 0; i < list.length; i++) out.push({value: list[i], label: app.presetText(list[i])});
+						for (var index = 0; index < list.length; index++) out.push({value: list[index], label: app.presetText(list[index])});
 						return out;
 					}
 					if (kind === "oscillate") return app.fanSupports(entityId, "oscillate") ? [{value: false, label: "Uit"}, {value: true, label: "Aan"}] : [];

@@ -18,14 +18,14 @@ Screen {
 	property variant domainGroups: [
 		{label: "Alle typen", domains: []},
 		{label: "Lampen", domains: ["light"]},
-		{label: "Schakelaars", domains: ["switch", "input_boolean", "fan"]},
+		{label: "Schakelaars", domains: ["switch", "input_boolean", "fan", "valve", "group"]},
 		{label: "Sensoren", domains: ["sensor", "binary_sensor"]},
 		{label: "Klimaat", domains: ["climate", "water_heater", "humidifier"]},
 		{label: "Scènes/scripts", domains: ["scene", "script", "button", "input_button", "automation"]},
 		{label: "Overig", domains: ["*"]}
 	]
 	property int domainIndex: 0
-	property variant knownDomains: ["light", "switch", "input_boolean", "fan", "sensor", "binary_sensor", "climate", "water_heater", "humidifier", "scene", "script", "button", "input_button", "automation"]
+	property variant knownDomains: ["light", "switch", "input_boolean", "fan", "valve", "group", "sensor", "binary_sensor", "climate", "water_heater", "humidifier", "scene", "script", "button", "input_button", "automation"]
 
 	onShown: {
 		app.allEntitiesLoaded.connect(rebuild);
@@ -55,24 +55,24 @@ Screen {
 
 	function rebuild() {
 		var list = [];
-		for (var i = 0; i < app.allEntities.length; i++) if (matches(app.allEntities[i])) list.push(app.allEntities[i]);
+		for (var entityIndex = 0; entityIndex < app.allEntities.length; entityIndex++) if (matches(app.allEntities[entityIndex])) list.push(app.allEntities[entityIndex]);
 		// sort keys made once, not in every comparison
 		var keyed = [];
-		for (var index = 0; index < list.length; index++) keyed.push({e: list[index], rank: app.areaRank(list[index].area), name: (list[index].name || list[index].id).toLowerCase()});
+		for (var index = 0; index < list.length; index++) keyed.push({entity: list[index], rank: app.areaRank(list[index].area), name: (list[index].name || list[index].id).toLowerCase()});
 		keyed.sort(function(first, second) {
 			if (first.rank !== second.rank) return first.rank - second.rank;
 			return first.name < second.name ? -1 : (first.name > second.name ? 1 : 0);
 		});
 		var rows = [];
-		for (var j = 0; j < keyed.length; j++) {
-			var entity = keyed[j].e;
-			var k = app.indexOf(entity.id);
+		for (var keyedIndex = 0; keyedIndex < keyed.length; keyedIndex++) {
+			var entity = keyed[keyedIndex].entity;
+			var chosenPosition = app.indexOf(entity.id);
 			rows.push({entityId: entity.id, haName: entity.name || entity.id, area: entity.area || "Geen ruimte",
-				selected: k >= 0, fav: k >= 0 && app.entities[k].fav, ownName: k >= 0 ? app.entities[k].name : ""});
+				selected: chosenPosition >= 0, fav: chosenPosition >= 0 && app.entities[chosenPosition].fav, ownName: chosenPosition >= 0 ? app.entities[chosenPosition].name : ""});
 		}
 		entityModel.clear();
 		// all rows in one go: a hundred times faster than one by one (an older Qt without it: one by one)
-		try { entityModel.append(rows); } catch (err) {}
+		try { entityModel.append(rows); } catch (errorText) {}
 		if (entityModel.count !== rows.length) {
 			entityModel.clear();
 			for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) entityModel.append(rows[rowIndex]);
@@ -82,19 +82,19 @@ Screen {
 
 	// after a change: only the rows that differ (a model update per row is slow on the Toon)
 	function updateMarks() {
-		for (var i = 0; i < entityModel.count; i++) {
-			var row = entityModel.get(i);
-			var k = app.indexOf(row.entityId);
-			var selected = k >= 0, fav = k >= 0 && app.entities[k].fav, ownName = k >= 0 ? app.entities[k].name : "";
-			if (row.selected !== selected) entityModel.setProperty(i, "selected", selected);
-			if (row.fav !== fav) entityModel.setProperty(i, "fav", fav);
-			if (row.ownName !== ownName) entityModel.setProperty(i, "ownName", ownName);
+		for (var rowIndex = 0; rowIndex < entityModel.count; rowIndex++) {
+			var row = entityModel.get(rowIndex);
+			var chosenPosition = app.indexOf(row.entityId);
+			var selected = chosenPosition >= 0, fav = chosenPosition >= 0 && app.entities[chosenPosition].fav, ownName = chosenPosition >= 0 ? app.entities[chosenPosition].name : "";
+			if (row.selected !== selected) entityModel.setProperty(rowIndex, "selected", selected);
+			if (row.fav !== fav) entityModel.setProperty(rowIndex, "fav", fav);
+			if (row.ownName !== ownName) entityModel.setProperty(rowIndex, "ownName", ownName);
 		}
 	}
 
 	function nextArea() {
 		var areas = [""];
-		for (var i = 0; i < app.areaNames.length; i++) areas.push(app.areaNames[i]);
+		for (var index = 0; index < app.areaNames.length; index++) areas.push(app.areaNames[index]);
 		areas.push("Geen ruimte");
 		var position = areas.indexOf(areaFilter);
 		areaFilter = areas[(position + 1) % areas.length];

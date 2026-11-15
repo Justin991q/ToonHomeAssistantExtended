@@ -75,8 +75,8 @@ Rectangle {
 				if (card.adjustable) openSettings();
 				return;
 			}
-			if (card.action !== "alarm" && card.action !== "open") card.pending = true;
-			app.activate(card.entityId);
+			// pulsing only when a command went out (not for a screen that opens, or a question first)
+			card.pending = app.activate(card.entityId) === true;
 		}
 	}
 

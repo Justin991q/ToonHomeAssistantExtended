@@ -44,6 +44,10 @@ App {
 	property url cameraScreenUrl: "HomeassistantCameraScreen.qml"
 	property HomeassistantPersonScreen homeassistantPersonScreen
 	property url personScreenUrl: "HomeassistantPersonScreen.qml"
+	property HomeassistantTimerScreen homeassistantTimerScreen
+	property url timerScreenUrl: "HomeassistantTimerScreen.qml"
+	property HomeassistantInputScreen homeassistantInputScreen
+	property url inputScreenUrl: "HomeassistantInputScreen.qml"
 	property HomeassistantTileSetupScreen homeassistantTileSetupScreen
 	property url tileSetupScreenUrl: "HomeassistantTileSetupScreen.qml"
 	property HomeassistantEnergySetupScreen homeassistantEnergySetupScreen
@@ -98,6 +102,12 @@ App {
 	property string toonAddress: ""           // for showing the web editor's address
 	property var wsClients: []                 // var, not variant: keeps the sockets referenced for the garbage collector
 
+	// ---- the parts in their own files: they work on this app's properties and call its functions ----
+	property alias live: liveConnection         // HaLive.qml: live updates over Home Assistant's WebSocket API
+	property alias energyData: energyModel      // HaEnergy.qml: the Energie tab's history, prices and costs
+	HaLive { id: liveConnection }
+	HaEnergy { id: energyModel }
+
 	signal statesUpdated()
 	signal selectionChanged()
 	signal allEntitiesLoaded()
@@ -124,6 +134,8 @@ App {
 		registry.registerWidget("screen", mediaScreenUrl, this, "homeassistantMediaScreen");
 		registry.registerWidget("screen", cameraScreenUrl, this, "homeassistantCameraScreen");
 		registry.registerWidget("screen", personScreenUrl, this, "homeassistantPersonScreen");
+		registry.registerWidget("screen", inputScreenUrl, this, "homeassistantInputScreen");
+		registry.registerWidget("screen", timerScreenUrl, this, "homeassistantTimerScreen");
 		registry.registerWidget("screen", energySetupScreenUrl, this, "homeassistantEnergySetupScreen");
 		registry.registerWidget("screen", tileSetupScreenUrl, this, "homeassistantTileSetupScreen");
 		registry.registerWidget("systrayIcon", trayUrl, this, "homeassistantTray");
@@ -139,15 +151,15 @@ App {
 		var cacheAge = loadEntitiesCache();
 		if (isConfigured()) {
 			pollStates();
-			liveStart();
+			live.liveStart();
 			if (cacheAge < 0 || cacheAge > allMaxAgeHours * 3600 * 1000) loadAllEntities();
-			loadEnergyHistory();
+			energyData.loadEnergyHistory();
 		}
 	}
 
 	onEntitiesChanged: {
 		var map = {};
-		for (var i = 0; i < entities.length; i++) map[entities[i].id] = i;
+		for (var index = 0; index < entities.length; index++) map[entities[index].id] = index;
 		chosenIndex = map;
 	}
 
@@ -198,13 +210,13 @@ App {
 
 	function cleanEnergy(source) {
 		var out = {};
-		for (var i = 0; i < energyKeys.length; i++) {
-			var k = energyKeys[i];
-			var list = source[k] || [];
+		for (var index = 0; index < energyKeys.length; index++) {
+			var fieldKey = energyKeys[index];
+			var list = source[fieldKey] || [];
 			if (typeof list === "string") list = list ? [list] : [];
 			var ids = [];
-			for (var j = 0; j < list.length; j++) if (list[j] && ids.indexOf(String(list[j])) < 0) ids.push(String(list[j]));
-			out[k] = ids;
+			for (var innerIndex = 0; innerIndex < list.length; innerIndex++) if (list[innerIndex] && ids.indexOf(String(list[innerIndex])) < 0) ids.push(String(list[innerIndex]));
+			out[fieldKey] = ids;
 		}
 		return out;
 	}
@@ -212,8 +224,8 @@ App {
 	function cleanEntities(list) {
 		var out = [];
 		var seen = {};
-		for (var i = 0; i < list.length; i++) {
-			var entity = list[i];
+		for (var index = 0; index < list.length; index++) {
+			var entity = list[index];
 			if (!entity || !entity.id || seen[entity.id]) continue;
 			seen[entity.id] = true;
 			out.push({id: String(entity.id), name: entity.name ? String(entity.name) : "", fav: entity.fav === true});
@@ -242,9 +254,9 @@ App {
 		lastError = "";
 		haStates = {};
 		liveFailed = false;
-		liveStop();
+		live.liveStop();
 		if (isConfigured()) {
-			liveStart();
+			live.liveStart();
 			pollStates();
 			loadAllEntities();
 		}
@@ -256,51 +268,71 @@ App {
 	// ======================================================================
 
 	function indexOf(id) {
-		var i = chosenIndex[id];
-		return i === undefined ? -1 : i;
+		var index = chosenIndex[id];
+		return index === undefined ? -1 : index;
 	}
 
 	function isSelected(id) { return indexOf(id) >= 0; }
 
+	// a whole new selection (the web editor's save): saved and polled at once
 	function setEntities(list) {
 		entities = cleanEntities(list);
+		saveSoon.stop();
+		pollSoon.stop();
 		saveSettings();
 		selectionChanged();
 		pollStates();
 		broadcastState();
 	}
 
+	// a tap on the Toon (a tick, a star, a name): the screens follow at once, the settings file and the poll
+	// a moment after the last tap. Ten ticks in a row are one write to the Toon's flash and one request
+	function changeEntities(list) {
+		entities = cleanEntities(list);
+		selectionChanged();
+		saveSettingsSoon();
+		pollSoon.restart();
+		broadcastState();
+	}
+
+	function saveSettingsSoon() { saveSoon.restart(); }
+
+	Timer { id: saveSoon; interval: 2000; onTriggered: saveSettings() }
+	Timer { id: pollSoon; interval: 700; onTriggered: pollStates() }
+	// the GUI stops (a restart) while a save is still waiting: written now
+	Component.onDestruction: if (saveSoon.running) saveSettings()
+
 	function toggleSelected(id) {
 		var list = entities.slice(0);
-		var i = indexOf(id);
-		if (i >= 0) list.splice(i, 1); else list.push({id: id, name: "", fav: false});
-		setEntities(list);
+		var position = indexOf(id);
+		if (position >= 0) list.splice(position, 1); else list.push({id: id, name: "", fav: false});
+		changeEntities(list);
 	}
 
 	function toggleFavourite(id) {
 		var list = entities.slice(0);
-		var i = indexOf(id);
-		if (i < 0) return;
-		list[i] = {id: list[i].id, name: list[i].name, fav: !list[i].fav};
-		setEntities(list);
+		var position = indexOf(id);
+		if (position < 0) return;
+		list[position] = {id: list[position].id, name: list[position].name, fav: !list[position].fav};
+		changeEntities(list);
 	}
 
 	function rename(id, name) {
 		var list = entities.slice(0);
-		var i = indexOf(id);
-		if (i < 0) return;
-		list[i] = {id: list[i].id, name: (name || "").trim(), fav: list[i].fav};
-		setEntities(list);
+		var position = indexOf(id);
+		if (position < 0) return;
+		list[position] = {id: list[position].id, name: (name || "").trim(), fav: list[position].fav};
+		changeEntities(list);
 	}
 
-	function setSortMode(mode) { sortMode = mode; saveSettings(); selectionChanged(); }
-	function setFavouritesOnly(enabled) { favouritesOnly = enabled; saveSettings(); selectionChanged(); }
+	function setSortMode(mode) { sortMode = mode; saveSettingsSoon(); selectionChanged(); }
+	function setFavouritesOnly(enabled) { favouritesOnly = enabled; saveSettingsSoon(); selectionChanged(); }
 	function setSystray(enabled) { enableSystray = enabled; saveSettings(); broadcastState(); }
 
 	// the name to show: your own, else HA's friendly name, else the entity id
 	function displayName(id) {
-		var i = indexOf(id);
-		if (i >= 0 && entities[i].name) return entities[i].name;
+		var index = indexOf(id);
+		if (index >= 0 && entities[index].name) return entities[index].name;
 		var entry = haStates[id];
 		if (entry && entry.name) return entry.name;
 		var entity = allIndex[id];
@@ -317,11 +349,11 @@ App {
 	// the chosen entities as the screen shows them: [{id, name, area, fav, section}] sorted by sortMode
 	function sortedEntities(onlyFavs, mode) {
 		var out = [];
-		for (var i = 0; i < entities.length; i++) {
-			var entity = entities[i];
+		for (var index = 0; index < entities.length; index++) {
+			var entity = entities[index];
 			if (onlyFavs && !entity.fav) continue;
 			var area = areaOf(entity.id);
-			out.push({id: entity.id, name: displayName(entity.id), area: area, fav: entity.fav, order: i,
+			out.push({id: entity.id, name: displayName(entity.id), area: area, fav: entity.fav, order: index,
 				section: mode === "area" ? (area || "Geen ruimte") : (mode === "name" ? displayName(entity.id).charAt(0).toUpperCase() : "")});
 		}
 		if (mode === "area") {
@@ -342,8 +374,8 @@ App {
 		var own = areaOrder.indexOf(area || "");
 		if (own >= 0) return own;                     // also Overig (""), when you moved it
 		if (!area) return 100000;
-		var i = areaNames.indexOf(area);
-		return i >= 0 ? 1000 + i : 50000 + area.toLowerCase().charCodeAt(0);
+		var index = areaNames.indexOf(area);
+		return index >= 0 ? 1000 + index : 50000 + area.toLowerCase().charCodeAt(0);
 	}
 
 	// ======================================================================
@@ -356,15 +388,15 @@ App {
 	function tabList() {
 		var out = [];
 		var hasFav = false, hasNoArea = false, used = {};
-		for (var i = 0; i < entities.length; i++) {
-			if (entities[i].fav) hasFav = true;
-			var first = areaOf(entities[i].id);
+		for (var entityIndex = 0; entityIndex < entities.length; entityIndex++) {
+			if (entities[entityIndex].fav) hasFav = true;
+			var first = areaOf(entities[entityIndex].id);
 			if (first) used[first] = true; else hasNoArea = true;
 		}
 		if (hasFav) out.push({key: "*fav", label: "Favorieten"});
-		if (energyConfigured()) out.push({key: "*energy", label: "Energie"});
+		if (energyData.energyConfigured()) out.push({key: "*energy", label: "Energie"});
 		var areas = [];
-		for (var k in used) areas.push(k);
+		for (var usedArea in used) areas.push(usedArea);
 		if (hasNoArea) areas.push("");                // Overig: last, unless you moved it
 		areas.sort(function(first, second) { return (areaRank(first) - areaRank(second)) || (first < second ? -1 : (first > second ? 1 : 0)); });
 		for (var index = 0; index < areas.length; index++) out.push({key: areas[index], label: areas[index] || "Overig"});
@@ -378,7 +410,7 @@ App {
 
 	function defaultTabLabel() {
 		var list = defaultTabChoices();
-		for (var i = 0; i < list.length; i++) if (list[i].key === defaultTab) return list[i].label;
+		for (var index = 0; index < list.length; index++) if (list[index].key === defaultTab) return list[index].label;
 		return defaultTab === "" ? "Overig" : defaultTab;          // not there now (no entities in it): kept anyway
 	}
 
@@ -399,8 +431,8 @@ App {
 	function tabEntities(key) {
 		var out = [];
 		if (key === "*energy") return out;
-		for (var i = 0; i < entities.length; i++) {
-			var entity = entities[i];
+		for (var index = 0; index < entities.length; index++) {
+			var entity = entities[index];
 			if (key === "*fav" ? entity.fav : areaOf(entity.id) === key) out.push(entity.id);
 		}
 		return out;
@@ -410,7 +442,7 @@ App {
 	function tabOnCount(key) {
 		var ids = tabEntities(key);
 		var count = 0;
-		for (var i = 0; i < ids.length; i++) if ((actionOf(ids[i]) === "toggle" || domainOf(ids[i]) === "fan") && isOn(ids[i])) count++;
+		for (var index = 0; index < ids.length; index++) if ((actionOf(ids[index]) === "toggle" || domainOf(ids[index]) === "fan") && isOn(ids[index])) count++;
 		return count;
 	}
 
@@ -421,7 +453,8 @@ App {
 		var map = {light: "bulb", "switch": "plug", fan: "fan", cover: "blinds", lock: "lock", alarm_control_panel: "shield",
 			scene: "palette", script: "play", button: "button", input_button: "button", climate: "thermometer", water_heater: "flame",
 			media_player: "speaker", person: "person", device_tracker: "person", binary_sensor: "eye", input_boolean: "toggle",
-			automation: "bolt", vacuum: "robot", humidifier: "droplet", camera: "camera", weather: "sun"};
+			automation: "bolt", vacuum: "robot", humidifier: "droplet", camera: "camera", weather: "sun", valve: "valve",
+			select: "list", input_select: "list", timer: "timer", counter: "counter"};
 		if (domain === "climate" && attr(id, "hvac_action") === "heating") return "flame";
 		// a motion sensor: someone moving, or the same crossed out (as mdi:motion-sensor / motion-sensor-off)
 		if (domain === "binary_sensor" && deviceClass(id) === "motion") return haStates[id] && haStates[id].state === "on" ? "motion" : "motion-off";
@@ -463,6 +496,7 @@ App {
 		if (domain === "humidifier" || domain === "fan") return stateNow === "on";
 		if (domain === "binary_sensor") return stateNow === "on";          // motion, a door open, …
 		if (domain === "media_player") return stateNow === "playing";
+		if (domain === "timer") return stateNow === "active";
 		return actionOf(id) === "toggle" && isOn(id);
 	}
 
@@ -485,9 +519,10 @@ App {
 	// a sensor shows its value big: "21,4°"; a thermostat its room temperature; the rest a word
 	function isValueCard(id) {
 		var domain = domainOf(id);
-		if (domain === "climate") return typeof attr(id, "current_temperature") === "number";
+		if (domain === "climate" || domain === "water_heater") return typeof attr(id, "current_temperature") === "number";
 		if (domain === "humidifier") return typeof attr(id, "current_humidity") === "number";
-		if (domain !== "sensor" && domain !== "input_number" && domain !== "number") return false;
+		if (domain === "sensor" && deviceClass(id) === "timestamp") return false;
+		if (domain !== "sensor" && domain !== "input_number" && domain !== "number" && domain !== "counter") return false;
 		var entry = haStates[id];
 		return entry && /^-?\d+(\.\d+)?$/.test(entry.state);
 	}
@@ -495,7 +530,7 @@ App {
 	// the big text of a value card
 	function valueText(id) {
 		var domain = domainOf(id);
-		if (domain === "climate") return degrees(attr(id, "current_temperature"));
+		if (domain === "climate" || domain === "water_heater") return degrees(attr(id, "current_temperature"));
 		if (domain === "humidifier") return Math.round(attr(id, "current_humidity")) + "%";
 		return stateText(id);
 	}
@@ -514,6 +549,11 @@ App {
 			if (stateNow !== "on") return "Uit";
 			return typeof attr(id, "humidity") === "number" ? "Naar " + Math.round(attr(id, "humidity")) + "%" : "Aan";
 		}
+		if (domain === "water_heater") {
+			if (stateNow === "off") return "Uit";
+			var heaterTarget = climateTargetText(id);
+			return heaterTarget ? "Naar " + heaterTarget : waterHeaterModeText(stateNow);
+		}
 		return "";
 	}
 
@@ -522,17 +562,17 @@ App {
 		return i18n.number(value, 1, i18n.omit_trail_zeros) + "°";
 	}
 
-	function friendlyError(err) {
-		if (err === "geen verbinding") return "Geen verbinding met Home Assistant";
-		if (err === "token ongeldig (401)") return "Home Assistant weigert het token";
-		return "Dat lukte niet (" + err + ")";
+	function friendlyError(errorText) {
+		if (errorText === "geen verbinding") return "Geen verbinding met Home Assistant";
+		if (errorText === "token ongeldig (401)") return "Home Assistant weigert het token";
+		return "Dat lukte niet (" + errorText + ")";
 	}
 
 	property int tileMax: 4
 
 	function cleanTile(list) {
 		var out = [];
-		for (var i = 0; i < list.length && out.length < tileMax; i++) if (list[i] && out.indexOf(String(list[i])) < 0) out.push(String(list[i]));
+		for (var index = 0; index < list.length && out.length < tileMax; index++) if (list[index] && out.indexOf(String(list[index])) < 0) out.push(String(list[index]));
 		return out;
 	}
 
@@ -546,15 +586,15 @@ App {
 	// what the tile shows: your choice (those still chosen), else the favourites, else the first chosen ones
 	function tileList() {
 		var out = [];
-		for (var i = 0; i < tileEntities.length; i++) if (isSelected(tileEntities[i])) out.push(tileEntities[i]);
+		for (var index = 0; index < tileEntities.length; index++) if (isSelected(tileEntities[index])) out.push(tileEntities[index]);
 		if (out.length > 0) return out;
 		return favouriteList().slice(0, tileMax);
 	}
 
 	function favouriteList() {
 		var out = [];
-		for (var i = 0; i < entities.length; i++) if (entities[i].fav) out.push(entities[i].id);
-		if (out.length === 0) for (var j = 0; j < entities.length; j++) out.push(entities[j].id);   // no favourites: the first ones
+		for (var index = 0; index < entities.length; index++) if (entities[index].fav) out.push(entities[index].id);
+		if (out.length === 0) for (var innerIndex = 0; innerIndex < entities.length; innerIndex++) out.push(entities[innerIndex].id);   // no favourites: the first ones
 		return out;
 	}
 
@@ -563,49 +603,49 @@ App {
 	// ======================================================================
 
 	function request(method, path, body, onDone) {
-		var xhr = new XMLHttpRequest();
-		xhr.open(method, haUrl + path, true);
-		xhr.setRequestHeader("Authorization", "Bearer " + haToken);
-		xhr.setRequestHeader("Content-Type", "application/json");
-		xhr.onreadystatechange = function() {
-			if (xhr.readyState !== 4) return;
-			if (xhr.status >= 200 && xhr.status < 300) {
-				onDone(xhr.responseText, "");
+		var httpRequest = new XMLHttpRequest();
+		httpRequest.open(method, haUrl + path, true);
+		httpRequest.setRequestHeader("Authorization", "Bearer " + haToken);
+		httpRequest.setRequestHeader("Content-Type", "application/json");
+		httpRequest.onreadystatechange = function() {
+			if (httpRequest.readyState !== 4) return;
+			if (httpRequest.status >= 200 && httpRequest.status < 300) {
+				onDone(httpRequest.responseText, "");
 			} else {
-				var err = xhr.status === 0 ? "geen verbinding" : (xhr.status === 401 ? "token ongeldig (401)" : "HTTP " + xhr.status);
-				onDone(null, err);
+				var errorText = httpRequest.status === 0 ? "geen verbinding" : (httpRequest.status === 401 ? "token ongeldig (401)" : "HTTP " + httpRequest.status);
+				onDone(null, errorText);
 			}
 		};
-		xhr.send(body ? JSON.stringify(body) : null);
+		httpRequest.send(body ? JSON.stringify(body) : null);
 	}
 
-	function template(tpl, onDone) {
-		request("POST", "/api/template", {template: tpl}, function(text, err) {
-			if (text === null) { onDone(null, err); return; }
+	function template(templateText, onDone) {
+		request("POST", "/api/template", {template: templateText}, function(text, errorText) {
+			if (text === null) { onDone(null, errorText); return; }
 			try { onDone(JSON.parse(text), ""); } catch (error) { onDone(null, "onverwacht antwoord"); }
 		});
 	}
 
 	// test with an address and token that are not saved yet; onDone(ok, message)
 	function testConnection(url, token, onDone) {
-		var xhr = new XMLHttpRequest();
-		xhr.open("GET", cleanUrl(url) + "/api/", true);
-		xhr.setRequestHeader("Authorization", "Bearer " + (token || haToken));
-		xhr.onreadystatechange = function() {
-			if (xhr.readyState !== 4) return;
-			if (xhr.status === 200) {
-				var msg = "OK";
-				try { msg = JSON.parse(xhr.responseText).message || "OK"; } catch (error) {}
-				onDone(true, msg);
-			} else if (xhr.status === 401) {
+		var httpRequest = new XMLHttpRequest();
+		httpRequest.open("GET", cleanUrl(url) + "/api/", true);
+		httpRequest.setRequestHeader("Authorization", "Bearer " + (token || haToken));
+		httpRequest.onreadystatechange = function() {
+			if (httpRequest.readyState !== 4) return;
+			if (httpRequest.status === 200) {
+				var messageText = "OK";
+				try { messageText = JSON.parse(httpRequest.responseText).message || "OK"; } catch (error) {}
+				onDone(true, messageText);
+			} else if (httpRequest.status === 401) {
 				onDone(false, "Bereikbaar, maar het token klopt niet (401)");
-			} else if (xhr.status === 0) {
+			} else if (httpRequest.status === 0) {
 				onDone(false, "Geen verbinding met " + cleanUrl(url));
 			} else {
-				onDone(false, "Fout: HTTP " + xhr.status);
+				onDone(false, "Fout: HTTP " + httpRequest.status);
 			}
 		};
-		xhr.send();
+		httpRequest.send();
 	}
 
 	function jsonString(value) { return JSON.stringify(String(value)); }
@@ -621,6 +661,16 @@ App {
 			"entity_picture", "source", "source_list"],
 		camera: ["entity_picture"],
 		binary_sensor: ["device_class"],
+		sensor: ["device_class"],
+		cover: ["device_class"],
+		valve: ["device_class"],
+		select: ["options"],
+		input_select: ["options"],
+		number: ["min", "max", "step", "mode"],
+		input_number: ["min", "max", "step", "mode"],
+		timer: ["duration", "remaining", "finishes_at"],
+		counter: ["initial", "step", "minimum", "maximum"],
+		water_heater: ["current_temperature", "temperature", "min_temp", "max_temp", "target_temp_step", "operation_mode", "operation_list"],
 		fan: ["percentage", "percentage_step", "preset_mode", "preset_modes", "oscillating", "direction"],
 		person: ["latitude", "longitude", "gps_accuracy", "entity_picture"],
 		device_tracker: ["latitude", "longitude", "gps_accuracy", "entity_picture"]
@@ -635,9 +685,9 @@ App {
 	// the ids polled: the chosen entities and the Energie tab's
 	function pollIds() {
 		var out = [];
-		for (var i = 0; i < entities.length; i++) out.push(entities[i].id);
-		var energyList = energyIds();
-		for (var j = 0; j < energyList.length; j++) if (out.indexOf(energyList[j]) < 0) out.push(energyList[j]);
+		for (var index = 0; index < entities.length; index++) out.push(entities[index].id);
+		var energyList = energyData.energyIds();
+		for (var innerIndex = 0; innerIndex < energyList.length; innerIndex++) if (out.indexOf(energyList[innerIndex]) < 0) out.push(energyList[innerIndex]);
 		return out;
 	}
 
@@ -647,27 +697,27 @@ App {
 	function pollStates() {
 		var list = pollIds();
 		if (!isConfigured() || list.length === 0) return;
-		if (liveConnected) liveSubscribe();            // the selection may have changed: the live updates follow it
-		else if (!haSocket.active && !liveReconnect.running) liveStart();
+		live.liveFollow();
 		var ids = [];
-		for (var i = 0; i < list.length; i++) ids.push(jsonString(list[i]));
-		var tpl = "{%- set ext = " + JSON.stringify(extKeys) + " -%}"
+		for (var idIndex = 0; idIndex < list.length; idIndex++) ids.push(jsonString(list[idIndex]));
+		var templateText = "{%- set ext = " + JSON.stringify(extKeys) + " -%}"
 			+ "[{%- for i in [" + ids.join(",") + "] -%}"
 			+ "{%- set ns = namespace(v=[]) -%}{%- for k in ext.get(i.split('.')[0], []) -%}{%- set ns.v = ns.v + [state_attr(i, k)] -%}{%- endfor -%}"
 			+ "{{ [i, states(i), state_attr(i, 'unit_of_measurement'), state_attr(i, 'friendly_name'), area_name(i), state_attr(i, 'code_format'), state_attr(i, 'code_arm_required'), state_attr(i, 'supported_features'), "
 			+ "([state_attr(i, 'brightness'), state_attr(i, 'supported_color_modes'), state_attr(i, 'hs_color'), state_attr(i, 'color_temp_kelvin'), "
 			+ "state_attr(i, 'min_color_temp_kelvin'), state_attr(i, 'max_color_temp_kelvin'), state_attr(i, 'color_mode')] if i.startswith('light.') else none), "
-			+ "ns.v, (as_timestamp(states[i].last_changed) if i.split('.')[0] in ['person', 'device_tracker'] and states[i] else none)] | tojson }}"
+			+ "ns.v, (as_timestamp(states[i].last_changed) if i.split('.')[0] in ['person', 'device_tracker'] and states[i] else none), "
+			+ "(as_timestamp(states[i].last_updated) if states[i] else none)] | tojson }}"
 			+ "{%- if not loop.last %},{% endif -%}{%- endfor -%}]";
-		var seq = ++pollSeq;
-		template(tpl, function(list, err) {
+		var pollNumber = ++pollSeq;
+		template(templateText, function(list, errorText) {
 			// an answer to an older poll that comes in after a newer one (another selection by then): not used
-			if (seq < pollApplied) return;
-			pollApplied = seq;
+			if (pollNumber < pollApplied) return;
+			pollApplied = pollNumber;
 			if (list === null) {
 				if (liveConnected) return;            // live updates carry on
 				connected = false;
-				lastError = err;
+				lastError = errorText;
 				statesUpdated();
 				return;
 			}
@@ -677,21 +727,21 @@ App {
 			var map = {};
 			var liveIsStale = false;
 			for (var known in haStates) if (keep[known]) map[known] = haStates[known];
-			for (var j = 0; j < list.length; j++) {
-				var row = list[j];
+			for (var innerIndex = 0; innerIndex < list.length; innerIndex++) {
+				var row = list[innerIndex];
 				if (!keep[row[0]]) continue;
 				var polled = {state: row[1], unit: row[2] || "", name: row[3] || "", area: row[4] || "",
 					codeFormat: row[5] || "", codeArmRequired: row[6] !== false, features: row[7] || 0, light: lightInfo(row[8]),
 					attrs: extAttrs(row[0], row[9]), changed: row[10] || 0};
 				if (liveConnected && liveRaw[row[0]] && map[row[0]]) {
 					var heldNow = holds[row[0]] && holds[row[0]].until > Date.now();
-					if (polled.state === map[row[0]].state || heldNow) {
-						// live is newer than a poll's answer: only the area (live doesn't send it)
+					if (heldNow || !live.liveMissed(liveRaw[row[0]], polled.state, row[11])) {
+						// live is as new as the poll's answer, or newer: only the area (live doesn't send it)
 						map[row[0]] = copyState(map[row[0]], {area: polled.area});
 						continue;
 					}
-					// Home Assistant says otherwise than live did: the live connection may be dead without knowing
-					// it (a sleeping computer, a router restart). The poll counts, live connects again
+					// Home Assistant has a newer state than live brought: the live connection may be dead without
+					// knowing it (a sleeping computer, a router restart). The poll counts, live connects again
 					liveIsStale = true;
 				}
 				map[row[0]] = polled;
@@ -700,7 +750,7 @@ App {
 			var hadWeather = false;
 			for (var id in map) if (domainOf(id) === "weather" && !forecasts[id]) hadWeather = true;
 			haStates = map;
-			if (liveIsStale) liveRestart("a poll differs from the live states");
+			if (liveIsStale) live.liveRestart("a poll differs from the live states");
 			connected = true;
 			lastError = "";
 			cameraTick++;
@@ -718,7 +768,7 @@ App {
 		var keys = extKeys[domainOf(id)];
 		if (!keys || !values) return {};
 		var out = {};
-		for (var i = 0; i < keys.length && i < values.length; i++) out[keys[i]] = values[i];
+		for (var index = 0; index < keys.length && index < values.length; index++) out[keys[index]] = values[index];
 		return out;
 	}
 
@@ -737,196 +787,11 @@ App {
 	property var liveRaw: ({})                // entity id -> {s, a (all attributes), lc}
 	property int liveRetry: 0
 
-	function liveUrl() { return haUrl.replace(/^http/, "ws") + "/api/websocket"; }
-
-	function liveStart() {
-		if (!isConfigured() || liveFailed || pollIds().length === 0) return;
-		liveReconnect.stop();
-		haSocket.active = false;
-		haSocket.url = liveUrl();
-		haSocket.active = true;
-		liveLoginTimeout.restart();
-	}
-
-	// connected, but no login within 15 seconds (a connection that is dead from the start): again
-	Timer {
-		id: liveLoginTimeout
-		interval: 15000
-		onTriggered: if (haSocket.active && !liveConnected && !liveFailed) liveRestart("no login")
-	}
-
-	function liveStop() {
-		liveReconnect.stop();
-		liveConnected = false;
-		liveSubId = 0;
-		liveSubKey = "";
-		haSocket.active = false;
-	}
-
-	function liveSend(obj) {
-		if (haSocket.status !== WebSocket.Open) return;
-		try { haSocket.sendTextMessage(JSON.stringify(obj)); } catch (error) {}
-	}
-
-	// (again) subscribe to the chosen entities and the Energie tab's
-	function liveSubscribe() {
-		var ids = pollIds();
-		var key = ids.join(",");
-		if (key === liveSubKey) return;
-		if (liveSubId) liveSend({id: liveMsgId++, type: "unsubscribe_events", subscription: liveSubId});
-		liveSubKey = key;
-		liveRaw = {};
-		if (ids.length === 0) { liveSubId = 0; return; }
-		liveSubId = liveMsgId++;
-		liveSend({id: liveSubId, type: "subscribe_entities", entity_ids: ids});
-	}
-
-	function liveMessage(text) {
-		var message;
-		try { message = JSON.parse(text); } catch (error) { return; }
-		liveLastMessage = Date.now();
-		if (message.type === "auth_required") {
-			liveSend({type: "auth", access_token: haToken});
-		} else if (message.type === "auth_ok") {
-			liveRetry = 0;
-			liveConnected = true;
-			liveSubKey = "";
-			liveSubscribe();
-		} else if (message.type === "auth_invalid") {
-			lastError = "token ongeldig (401)";
-			liveStop();
-			liveReconnect.interval = 5 * 60 * 1000;
-			liveReconnect.restart();
-		} else if (message.type === "result" && message.id === liveSubId && !message.success) {
-			// an older Home Assistant: no subscribe_entities. Polling it is
-			console.log("homeassistant: no live updates (" + (message.error ? message.error.message : "?") + "), polling");
-			liveFailed = true;
-			liveStop();
-		} else if (message.type === "event" && message.id === liveSubId && message.event) {
-			applyLive(message.event);
-		}
-	}
-
-	// subscribe_entities sends {a: {id: {s, a, lc}}} (everything, at first), {c: {id: {"+": {s, a, lc}, "-": {a: [keys]}}}} (changes)
-	// and {r: [ids]} (removed)
-	function applyLive(event) {
-		var raw = liveRaw;
-		var changed = [];
-		var id;
-		if (event.a) {
-			for (id in event.a) {
-				raw[id] = {s: event.a[id].s, a: event.a[id].a || {}, lc: event.a[id].lc || 0};
-				changed.push(id);
-			}
-		}
-		if (event.c) {
-			for (id in event.c) {
-				var change = event.c[id];
-				var entry = raw[id] || {s: "", a: {}, lc: 0};
-				var plus = change["+"];
-				if (plus) {
-					if (plus.s !== undefined) entry.s = plus.s;
-					if (plus.lc !== undefined) entry.lc = plus.lc;
-					if (plus.a) for (var k in plus.a) entry.a[k] = plus.a[k];
-				}
-				var minus = change["-"];
-				if (minus && minus.a) for (var j = 0; j < minus.a.length; j++) delete entry.a[minus.a[j]];
-				raw[id] = entry;
-				changed.push(id);
-			}
-		}
-		if (event.r) {
-			for (var index = 0; index < event.r.length; index++) {
-				raw[event.r[index]] = {s: "unavailable", a: raw[event.r[index]] ? raw[event.r[index]].a : {}, lc: 0};
-				changed.push(event.r[index]);
-			}
-		}
-		liveRaw = raw;
-		lastDataTime = Date.now();                      // also when nothing visible changed: the data is current
-		if (changed.length === 0) return;
-		var map = haStates;
-		var newWeather = false, any = false;
-		for (var index = 0; index < changed.length; index++) {
-			id = changed[index];
-			var before = map[id] ? JSON.stringify(map[id]) : "";
-			map[id] = liveState(id, raw[id], map[id]);
-			applyHold(map, id);
-			if (JSON.stringify(map[id]) !== before) any = true;
-			if (domainOf(id) === "weather" && !forecasts[id]) newWeather = true;
-		}
-		var wasConnected = connected;
-		connected = true;
-		lastError = "";
-		if (!any && wasConnected) return;            // nothing the cards show: no redraw (and no button rebuilt under a finger)
-		haStates = map;
-		statesUpdated();
-		if (newWeather) loadForecasts();
-	}
-
-	// Home Assistant's state and attributes -> what the cards read (the same as a poll gives)
-	function liveState(id, raw, prev) {
-		var attributes = raw.a || {};
-		var domain = domainOf(id);
-		var keys = extKeys[domain] || [];
-		var values = [];
-		for (var i = 0; i < keys.length; i++) values.push(attributes[keys[i]] === undefined ? null : attributes[keys[i]]);
-		var area = prev && prev.area ? prev.area : (allIndex[id] ? allIndex[id].area : "");
-		return {state: raw.s, unit: attributes.unit_of_measurement || "", name: attributes.friendly_name || "", area: area || "",
-			codeFormat: attributes.code_format || "", codeArmRequired: attributes.code_arm_required !== false, features: attributes.supported_features || 0,
-			light: domain === "light" ? lightInfo([attributes.brightness, attributes.supported_color_modes, attributes.hs_color, attributes.color_temp_kelvin,
-				attributes.min_color_temp_kelvin, attributes.max_color_temp_kelvin, attributes.color_mode]) : null,
-			attrs: extAttrs(id, values), changed: domain === "person" || domain === "device_tracker" ? raw.lc || 0 : 0};
-	}
-
-	WebSocket {
-		id: haSocket
-		active: false
-		onTextMessageReceived: liveMessage(message)
-		onStatusChanged: {
-			if (status !== WebSocket.Closed && status !== WebSocket.Error) return;
-			var was = liveConnected;
-			liveConnected = false;
-			liveSubId = 0;
-			liveSubKey = "";
-			if (!active || liveFailed || !isConfigured()) return;
-			active = false;
-			// try again: 2, 4, 8 … seconds, at most a minute; polling meanwhile
-			liveReconnect.interval = Math.min(60000, 2000 * Math.pow(2, Math.min(liveRetry, 5)));
-			liveRetry++;
-			liveReconnect.restart();
-			if (was) pollStates();
-		}
-	}
-
-	Timer { id: liveReconnect; onTriggered: liveStart() }
-
 	// a connection can die without the socket noticing (a sleeping computer, a router or Wi-Fi gone for a
 	// moment): then "live" would stay on while nothing comes in. So a ping every liveHeartbeatMs; when
 	// nothing at all came back for a while, the connection counts as dead: a poll at once, and connect again
 	property double liveLastMessage: 0
 	property int liveHeartbeatMs: 30000
-
-	Timer {
-		id: liveHeartbeat
-		interval: liveHeartbeatMs
-		repeat: true
-		running: liveConnected
-		onTriggered: {
-			if (Date.now() - liveLastMessage > liveHeartbeatMs * 2.5) liveRestart("no answer to the pings");
-			else liveSend({id: liveMsgId++, type: "ping"});
-		}
-	}
-
-	function liveRestart(reason) {
-		console.log("homeassistant: live connection again (" + reason + ")");
-		liveConnected = false;
-		liveSubId = 0;
-		liveSubKey = "";
-		haSocket.active = false;
-		liveReconnect.interval = 1000;
-		liveReconnect.restart();
-		pollStates();
-	}
 
 	Timer {
 		// camera images: renewed as often as a poll would (live updates don't change the picture)
@@ -944,19 +809,19 @@ App {
 
 	function loadForecasts() {
 		var ids = pollIds();
-		for (var i = 0; i < ids.length; i++) if (domainOf(ids[i]) === "weather") loadForecast(ids[i], "daily");
+		for (var index = 0; index < ids.length; index++) if (domainOf(ids[index]) === "weather") loadForecast(ids[index], "daily");
 	}
 
 	// HA 2024.x: a service with a response; a weather entity without a daily forecast gets the hourly one
 	function loadForecast(id, type) {
-		request("POST", "/api/services/weather/get_forecasts?return_response", {entity_id: id, type: type}, function(text, err) {
+		request("POST", "/api/services/weather/get_forecasts?return_response", {entity_id: id, type: type}, function(text, errorText) {
 			var list = null;
 			try {
 				var forecast = JSON.parse(text).service_response[id].forecast;
 				list = [];
-				for (var i = 0; i < forecast.length; i++) {
-					list.push({time: parseTime(forecast[i].datetime).getTime(), condition: forecast[i].condition || "", temp: forecast[i].temperature,
-						low: forecast[i].templow, rain: forecast[i].precipitation, daily: type === "daily"});
+				for (var index = 0; index < forecast.length; index++) {
+					list.push({time: parseTime(forecast[index].datetime).getTime(), condition: forecast[index].condition || "", temp: forecast[index].temperature,
+						low: forecast[index].templow, rain: forecast[index].precipitation, daily: type === "daily"});
 				}
 			} catch (error) {}
 			if (list === null || list.length === 0) {
@@ -999,52 +864,6 @@ App {
 	                                          // or the value in each hour (a price)
 	property variant priceForecast: ({})      // price entity id -> [24] today's prices from its attributes (dynamic contracts)
 
-	// [{key, label, units: accepted units, total: a meter reading (true) or power now (false), price: a tariff}]
-	function energyFields() {
-		var power = ["W", "kW"], kwh = ["kWh", "Wh", "MWh"];
-		var perKwh = ["EUR/kWh", "€/kWh", "ct/kWh", "EUR/MWh", "€/MWh"], perM3 = ["EUR/m³", "€/m³", "EUR/m3", "€/m3"];
-		return [
-			{key: "power", label: "Stroom: verbruik nu", units: power, total: false},
-			{key: "usage", label: "Stroom: meterstand verbruik", units: kwh, total: true},
-			{key: "export", label: "Stroom: meterstand teruglevering", units: kwh, total: true},
-			{key: "solarPower", label: "Zonnepanelen: vermogen nu", units: power, total: false},
-			{key: "solar", label: "Zonnepanelen: opgewekt (totaal)", units: kwh, total: true},
-			{key: "gas", label: "Gas: meterstand", units: ["m³", "ft³", "CCF"], total: true},
-			{key: "water", label: "Water: meterstand", units: ["L", "m³", "gal", "ft³"], total: true},
-			{key: "priceUsage", label: "Stroomprijs (per kWh)", units: perKwh, total: false, price: true},
-			{key: "priceExport", label: "Terugleververgoeding (per kWh)", units: perKwh, total: false, price: true},
-			{key: "priceGas", label: "Gasprijs (per m³)", units: perM3, total: false, price: true},
-			{key: "priceWater", label: "Waterprijs (per m³)", units: perM3, total: false, price: true}];
-	}
-
-	function energyIds() {
-		var out = [];
-		for (var i = 0; i < energyKeys.length; i++) {
-			var list = energy[energyKeys[i]] || [];
-			for (var j = 0; j < list.length; j++) if (out.indexOf(list[j]) < 0) out.push(list[j]);
-		}
-		return out;
-	}
-
-	function energyConfigured() { return energyIds().length > 0; }
-
-	function setEnergy(settings) {
-		energy = cleanEnergy(settings || {});
-		saveSettings();
-		energyHistory = {};
-		energyHistUntil = 0;
-		selectionChanged();
-		pollStates();
-		loadEnergyHistory();
-		broadcastState();
-	}
-
-	function setEnergyField(key, ids) {
-		var settings = copyState(energy, {});
-		settings[key] = ids;
-		setEnergy(settings);
-	}
-
 	function pad2(number) { return (number < 10 ? "0" : "") + number; }
 
 	// Home Assistant's times have microseconds ("…T10:00:00.123456+00:00"): the Toon's JavaScript wants at most 3 digits
@@ -1057,353 +876,24 @@ App {
 	property double energyHistUntil: 0        // up to when the history is in (ms); the next fetch only asks for what came after
 	property string energyHistKey: ""         // for which day and entities: another day or other entities -> everything again
 
-	function loadEnergyHistory() {
-		if (!isConfigured()) return;
-		var ids = [], priceIds = [];
-		var keys = ["usage", "export", "solar", "gas", "water", "priceUsage", "priceExport", "priceGas", "priceWater"];
-		for (var i = 0; i < keys.length; i++) {
-			var list = energy[keys[i]] || [];
-			for (var j = 0; j < list.length; j++) {
-				if (ids.indexOf(list[j]) < 0) ids.push(list[j]);
-				if (keys[i].indexOf("price") === 0 && priceIds.indexOf(list[j]) < 0) priceIds.push(list[j]);
-			}
-		}
-		if (ids.length === 0) return;
-		var now = new Date();
-		var midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-		var yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-		var day = midnight.toDateString();
-		var key = day + "|" + ids.join(",");
-		// a meter that reports every few seconds has thousands of readings a day: everything since yesterday only
-		// once (a new day, other entities), after that only what came since the last time
-		var full = key !== energyHistKey || energyHistUntil <= 0 || energyHistUntil < midnight.getTime();
-		var from = full ? yesterday : new Date(energyHistUntil);
-		// end_time: without it Home Assistant gives one day from the start
-		request("GET", "/api/history/period/" + from.toISOString() + "?end_time=" + encodeURIComponent(now.toISOString())
-			+ "&filter_entity_id=" + ids.join(",") + "&minimal_response&no_attributes", null, function(text, err) {
-			if (text === null) return;
-			var res;
-			try { res = JSON.parse(text); } catch (error) { return; }
-			var map = full ? {} : copyState(energyHistory, {});
-			for (var index = 0; index < res.length; index++) {
-				var rows = res[index];
-				if (!rows || rows.length === 0 || !rows[0].entity_id) continue;
-				var id = rows[0].entity_id;
-				var isPrice = priceIds.indexOf(id) >= 0;
-				if (full || !map[id]) map[id] = isPrice ? priceHistory(rows, yesterday, midnight, day) : meterHistory(rows, yesterday, midnight, day);
-				else map[id] = isPrice ? priceMore(map[id], rows, midnight) : meterMore(map[id], rows, midnight);
-			}
-			energyHistory = map;
-			energyHistKey = key;
-			energyHistUntil = now.getTime();
-			statesUpdated();
-		});
-		if (priceIds.length > 0) loadPriceForecast(priceIds);
-	}
-
-	// the readings since the last time, added to a meter's hours of today
-	function meterMore(hist, rows, midnight) {
-		var out = {today: hist.today.slice(0), yesterday: hist.yesterday, last: hist.last, day: hist.day};
-		for (var k = 0; k < rows.length; k++) {
-			var value = parseFloat(rows[k].state);
-			if (isNaN(value)) continue;
-			var time = parseTime(rows[k].last_changed || rows[k].last_updated);
-			if (out.last !== null) {
-				var inc = increment(out.last, value);
-				// the first row is the state at the start of the period, often from earlier: it counts in this hour
-				var hour = isNaN(time.getTime()) || time < midnight ? new Date().getHours() : time.getHours();
-				out.today[hour] += inc;
-			}
-			out.last = value;
-		}
-		return out;
-	}
-
-	// a price's values since the last time: from its hour on
-	function priceMore(hist, rows, midnight) {
-		var out = {today: hist.today.slice(0), yesterday: hist.yesterday, last: hist.last, day: hist.day, price: true};
-		for (var k = 0; k < rows.length; k++) {
-			var value = parseFloat(rows[k].state);
-			var time = parseTime(rows[k].last_changed || rows[k].last_updated);
-			if (isNaN(value) || isNaN(time.getTime()) || time < midnight) continue;
-			for (var hour = time.getHours(); hour < 24; hour++) out.today[hour] = value;
-			out.last = value;
-		}
-		return out;
-	}
-
-	function zeros() { var list = []; for (var hour = 0; hour < 24; hour++) list.push(0); return list; }
-
-	// a meter's readings -> its increments per hour, yesterday and today
-	function meterHistory(rows, yesterday, midnight, day) {
-		var out = {today: zeros(), yesterday: zeros(), last: null, day: day};
-		for (var k = 0; k < rows.length; k++) {
-			var value = parseFloat(rows[k].state);
-			if (isNaN(value)) continue;
-			var time = parseTime(rows[k].last_changed || rows[k].last_updated);
-			if (out.last !== null && !isNaN(time.getTime())) {
-				var inc = increment(out.last, value);
-				if (time >= midnight) out.today[time.getHours()] += inc;
-				else if (time >= yesterday) out.yesterday[time.getHours()] += inc;
-			}
-			out.last = value;
-		}
-		return out.last === null ? null : out;
-	}
-
-	// a price's values -> the price in each hour (the last value at the start of the hour, else in it), yesterday and today
-	function priceHistory(rows, yesterday, midnight, day) {
-		var points = [];
-		for (var k = 0; k < rows.length; k++) {
-			var value = parseFloat(rows[k].state);
-			var time = parseTime(rows[k].last_changed || rows[k].last_updated);
-			if (!isNaN(value) && !isNaN(time.getTime())) points.push({t: time.getTime(), v: value});
-		}
-		if (points.length === 0) return null;
-		var out = {today: [], yesterday: [], last: points[points.length - 1].v, day: day, price: true};
-		for (var hour = 0; hour < 48; hour++) {
-			var start = yesterday.getTime() + hour * 3600 * 1000;
-			var value = null;
-			for (var index = 0; index < points.length; index++) {
-				if (points[index].t <= start + 30 * 60 * 1000) value = points[index].v;      // the last change before half past
-				else break;
-			}
-			if (value === null) value = points[0].v;
-			(hour < 24 ? out.yesterday : out.today).push(value);
-		}
-		return out;
-	}
-
-	// a dynamic contract's prices for today, from the price entity's attributes when it has them:
-	// Nordpool (today: [24 or 96 numbers], raw_today: [{start, value}]), ENTSO-e (prices_today: [{time, price}]),
-	// others (prices: [{from|start|time, price|value}])
-	function loadPriceForecast(ids) {
-		var parts = [];
-		for (var i = 0; i < ids.length; i++) {
-			var quoted = jsonString(ids[i]);
-			parts.push(quoted + ": [state_attr(" + quoted + ", 'today'), state_attr(" + quoted + ", 'raw_today'), state_attr(" + quoted + ", 'prices_today'), state_attr(" + quoted + ", 'prices')]");
-		}
-		template("{# energy prices #}{{ {" + parts.join(", ") + "} | tojson }}", function(res, err) {
-			if (res === null) return;
-			var map = {};
-			for (var id in res) {
-				var hours = priceHours(res[id]);
-				if (hours) map[id] = hours;
-			}
-			priceForecast = map;
-			statesUpdated();
-		});
-	}
-
-	// the attributes -> 24 prices (an hour's average when they come per quarter), or null
-	function priceHours(attributes) {
-		if (!attributes) return null;
-		var today = new Date().toDateString();
-		var sums = zeros(), counts = zeros(), any = false;
-		function add(hour, value) { if (typeof value === "number" && hour >= 0 && hour < 24) { sums[hour] += value; counts[hour]++; any = true; } }
-		if (attributes[0] && attributes[0].length) {                       // today: [24] or [96]
-			var per = attributes[0].length >= 96 ? 4 : (attributes[0].length >= 48 ? 2 : 1);
-			for (var i = 0; i < attributes[0].length; i++) add(Math.floor(i / per), attributes[0][i]);
-		} else {
-			var lists = [attributes[1], attributes[2], attributes[3]];
-			for (var index = 0; index < lists.length; index++) {
-				var list = lists[index];
-				if (!list || !list.length) continue;
-				for (var k = 0; k < list.length; k++) {
-					var item = list[k];
-					var time = parseTime(item.start || item.from || item.time || item.startsAt);
-					if (isNaN(time.getTime()) || time.toDateString() !== today) continue;
-					add(time.getHours(), typeof item.value === "number" ? item.value : (typeof item.price === "number" ? item.price : item.total));
-				}
-				if (any) break;
-			}
-		}
-		if (!any) return null;
-		var out = [];
-		for (var hour = 0; hour < 24; hour++) out.push(counts[hour] ? sums[hour] / counts[hour] : null);
-		return out;
-	}
-
-	// a meter reading went from a to b: the use in between. A drop is a reset (a daily meter, a new meter)
-	function increment(before, after) {
-		if (after >= before) return after - before;
-		return after < before * 0.5 ? after : 0;      // a small dip is noise of the sensor
-	}
-
-	// a reading in the unit the Energie tab shows: kWh, m³ for gas, litres for water, W for power
-	function energyFactor(unit, key) {
-		if (unit === "Wh") return 0.001;
-		if (unit === "MWh") return 1000;
-		if (unit === "kW") return 1000;
-		if (key === "water" && unit === "m³") return 1000;
-		if (key === "water" && unit === "gal") return 3.785;
-		if (key === "water" && unit === "ft³") return 28.317;
-		if (key === "gas" && unit === "ft³") return 0.02832;
-		if (key === "gas" && unit === "CCF") return 2.832;
-		return 1;
-	}
-
-	function energyUnit(key) {
-		return {power: "W", solarPower: "W", usage: "kWh", "export": "kWh", solar: "kWh", gas: "m³", water: "L"}[key] || "";
-	}
-
-	// power now (W) of a field, summed; null when none of its entities has a number
-	function energyNow(key) {
-		var list = energy[key] || [];
-		var sum = 0, any = false;
-		for (var i = 0; i < list.length; i++) {
-			var entry = haStates[list[i]];
-			var value = entry ? parseFloat(entry.state) : NaN;
-			if (isNaN(value)) continue;
-			sum += value * energyFactor(entry.unit, key);
-			any = true;
-		}
-		return any ? sum : null;
-	}
-
-	// today's use of a meter field: {total, hours: [24]} in energyUnit(key); null when unknown yet
-	function energyToday(key) {
-		var list = energy[key] || [];
-		var hours = [], any = false;
-		for (var hour = 0; hour < 24; hour++) hours.push(0);
-		var nowHour = new Date().getHours();
-		var today = new Date().toDateString();
-		for (var i = 0; i < list.length; i++) {
-			var hist = energyHistory[list[i]];
-			if (!hist || hist.day !== today || hist.price) continue;
-			var entry = haStates[list[i]];
-			var factor = energyFactor(entry ? entry.unit : "", key);
-			for (var k = 0; k < 24; k++) hours[k] += hist.today[k] * factor;
-			// what the meter did since the history was fetched
-			var value = entry ? parseFloat(entry.state) : NaN;
-			if (!isNaN(value)) hours[nowHour] += increment(hist.last, value) * factor;
-			any = true;
-		}
-		if (!any) return null;
-		var total = 0;
-		for (var index = 0; index < 24; index++) total += hours[index];
-		return {total: total, hours: hours};
-	}
-
-	// yesterday's use of a meter field: {total, hours: [24], sameTime: up to this time of day}; null when unknown
-	function energyYesterday(key) {
-		var list = energy[key] || [];
-		var hours = zeros(), any = false;
-		var today = new Date().toDateString();
-		for (var i = 0; i < list.length; i++) {
-			var hist = energyHistory[list[i]];
-			if (!hist || hist.day !== today || hist.price) continue;
-			var entry = haStates[list[i]];
-			var factor = energyFactor(entry ? entry.unit : "", key);
-			for (var k = 0; k < 24; k++) hours[k] += hist.yesterday[k] * factor;
-			any = true;
-		}
-		if (!any) return null;
-		var now = new Date(), total = 0, same = 0;
-		for (var hour = 0; hour < 24; hour++) {
-			total += hours[hour];
-			if (hour < now.getHours()) same += hours[hour];
-			else if (hour === now.getHours()) same += hours[hour] * now.getMinutes() / 60;
-		}
-		return {total: total, hours: hours, sameTime: same};
-	}
-
-	// a price field in euro per kWh (or per m³), per hour of today: [24] or null. From the attributes (a dynamic
-	// contract's prices), else the history, else the price now. More entities are added up (e.g. a price and a surcharge)
-	function priceToday(key) {
-		var list = energy[key] || [];
-		if (list.length === 0) return null;
-		var out = zeros(), any = false;
-		var today = new Date().toDateString(), nowHour = new Date().getHours();
-		for (var i = 0; i < list.length; i++) {
-			var id = list[i];
-			var entry = haStates[id];
-			var factor = priceFactor(entry ? entry.unit : "");
-			var now = entry ? parseFloat(entry.state) : NaN;
-			var forecast = priceForecast[id], hist = energyHistory[id];
-			for (var hour = 0; hour < 24; hour++) {
-				var value = null;
-				if (forecast && typeof forecast[hour] === "number") value = forecast[hour];
-				else if (hist && hist.price && hist.day === today && hour <= nowHour) value = hist.today[hour];
-				if (hour === nowHour && !isNaN(now) && !(forecast && typeof forecast[hour] === "number")) value = now;
-				if (value === null && !isNaN(now)) value = now;             // a fixed tariff: the same all day
-				if (value !== null) { out[hour] += value * factor; any = true; }
-			}
-		}
-		return any ? out : null;
-	}
-
-	function priceNow(key) {
-		var prices = priceToday(key);
-		return prices ? prices[new Date().getHours()] : null;
-	}
-
-	function priceFactor(unit) {
-		if (unit === "ct/kWh") return 0.01;
-		if (unit === "EUR/MWh" || unit === "€/MWh") return 0.001;
-		return 1;
-	}
-
-	// today's costs of a panel in euro, or null without a price: electricity (use minus what went back), gas, water
-	function energyCost(panel) {
-		var cost = 0;
-		if (panel === "electricity") {
-			var use = energyToday("usage"), back = energyToday("export");
-			var priceUse = priceToday("priceUsage"), priceBack = priceToday("priceExport") || priceUse;
-			if (!priceUse || (!use && !back)) return null;
-			for (var hour = 0; hour < 24; hour++) {
-				if (use) cost += use.hours[hour] * priceUse[hour];
-				if (back && priceBack) cost -= back.hours[hour] * priceBack[hour];
-			}
-			return cost;
-		}
-		var key = panel === "gas" ? "gas" : "water";
-		var today = energyToday(key), prices = priceToday(panel === "gas" ? "priceGas" : "priceWater");
-		if (!today || !prices) return null;
-		var perUnit = key === "water" ? 0.001 : 1;         // water is in litres, its price per m³
-		for (var k = 0; k < 24; k++) cost += today.hours[k] * perUnit * prices[k];
-		return cost;
-	}
-
-	function euro(value, digits) {
-		if (value === null || value === undefined) return "-";
-		return (value < 0 ? "− " : "") + "€ " + i18n.number(Math.abs(value), digits === undefined ? 2 : digits, 0);
-	}
-
-	function energyNumber(value, key) {
-		if (value === null || value === undefined) return "-";
-		var unit = energyUnit(key);
-		if (unit === "W" && Math.abs(value) >= 1000) return i18n.number(value / 1000, 2, i18n.omit_trail_zeros) + " kW";
-		var digits = unit === "W" || unit === "L" ? 0 : (Math.abs(value) >= 100 ? 0 : (Math.abs(value) >= 10 ? 1 : 2));
-		return i18n.number(value, digits, i18n.omit_trail_zeros) + " " + unit;
-	}
-
-	Timer {
-		// the history: every 5 minutes (a new day starts by itself)
-		interval: 5 * 60 * 1000
-		repeat: true
-		running: isConfigured() && energyConfigured()
-		onTriggered: loadEnergyHistory()
-	}
-
 	// every entity HA has, with its area, plus HA's list of areas (for choosing)
 	function loadAllEntities() {
 		if (!isConfigured()) return;
 		loadingAll = true;
-		var tpl = "{\"areas\": {{ areas() | map('area_name') | list | tojson }}, \"entities\": ["
+		var templateText = "{\"areas\": {{ areas() | map('area_name') | list | tojson }}, \"entities\": ["
 			+ "{%- for s in states -%}{{ [s.entity_id, s.name, area_name(s.entity_id), s.state, s.attributes.get('unit_of_measurement'), s.attributes.get('device_class')] | tojson }}"
 			+ "{%- if not loop.last %},{% endif -%}{%- endfor -%}]}";
-		template(tpl, function(res, err) {
+		template(templateText, function(answer, errorText) {
 			loadingAll = false;
-			if (res === null) {
-				lastError = err;
+			if (answer === null) {
+				lastError = errorText;
 				allEntitiesLoaded();
 				broadcastState();
 				return;
 			}
-			setAllEntities(res.entities, res.areas || [], new Date().getTime());
+			setAllEntities(answer.entities, answer.areas || [], new Date().getTime());
 			connected = true;
-			saveEntitiesCache(res.entities);
+			saveEntitiesCache(answer.entities);
 			allEntitiesLoaded();
 			selectionChanged();
 			broadcastState();
@@ -1414,8 +904,8 @@ App {
 	// the web editor's message
 	function setAllEntities(rows, areas, version) {
 		var list = [], index = {};
-		for (var i = 0; i < rows.length; i++) {
-			var row = rows[i];
+		for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+			var row = rows[rowIndex];
 			var entity = {id: row[0], name: row[1] || "", area: row[2] || "", state: row[3], domain: row[0].split(".")[0], unit: row[4] || "", deviceClass: row[5] || ""};
 			list.push(entity);
 			index[entity.id] = entity;
@@ -1426,7 +916,7 @@ App {
 		areaNames = areas;
 		allVersion = version;
 		var compact = [];
-		for (var k = 0; k < list.length; k++) compact.push([list[k].id, list[k].name, list[k].area, list[k].state, list[k].unit]);
+		for (var listIndex = 0; listIndex < list.length; listIndex++) compact.push([list[listIndex].id, list[listIndex].name, list[listIndex].area, list[listIndex].state, list[listIndex].unit]);
 		allMessage = JSON.stringify({type: "entities", app: "homeassistantExtended", version: version, list: compact});
 	}
 
@@ -1470,8 +960,9 @@ App {
 	// what a tap on the entity does: "toggle", "press", "run" or "" (read only)
 	function actionOf(id) {
 		var domain = domainOf(id);
-		if (["light", "switch", "input_boolean", "automation", "siren", "cover", "lock", "vacuum", "group"].indexOf(domain) >= 0) return "toggle";
-		if (["fan", "climate", "humidifier", "media_player", "camera", "person", "device_tracker"].indexOf(domain) >= 0) return "open";
+		if (["light", "switch", "input_boolean", "automation", "siren", "cover", "lock", "vacuum", "group", "valve"].indexOf(domain) >= 0) return "toggle";
+		if (["fan", "climate", "humidifier", "media_player", "camera", "person", "device_tracker", "water_heater", "select", "input_select",
+			"number", "input_number", "timer", "counter"].indexOf(domain) >= 0) return "open";
 		if (domain === "button" || domain === "input_button") return "press";
 		if (domain === "script" || domain === "scene") return "run";
 		if (domain === "alarm_control_panel") return "alarm";
@@ -1480,42 +971,65 @@ App {
 
 	function isOn(id) {
 		var stateNow = haStates[id] ? haStates[id].state : "";
-		return ["on", "open", "opening", "unlocked", "playing", "heat", "cool", "heat_cool", "auto", "cleaning", "home"].indexOf(stateNow) >= 0;
+		return ["on", "open", "opening", "unlocked", "playing", "heat", "cool", "heat_cool", "auto", "cleaning", "home", "active"].indexOf(stateNow) >= 0;
 	}
 
-	function activate(id) {
+	// what opening this entity lets into the house: "" (nothing to ask), else the question before a tap does it.
+	// A lock that unlocks, a garage door or gate that opens: one stray tap on the Toon must not do that
+	function confirmQuestion(id) {
 		var domain = domainOf(id);
-		if (domain === "alarm_control_panel") { openAlarm(id); return; }
-		if (actionOf(id) === "open") { openDetail(id); return; }
+		if (isOn(id)) return "";                           // locking, closing: no question
+		if (domain === "lock") return displayName(id) + " ontgrendelen?";
+		if (domain === "cover" && ["garage", "gate", "door"].indexOf(deviceClass(id)) >= 0) return displayName(id) + " openen?";
+		return "";
+	}
+
+	// a tap on a card or on the tile. confirmed: the question (confirmQuestion) was answered with yes.
+	// Returns true when a command went to Home Assistant (the card pulses until the answer)
+	function activate(id, confirmed) {
+		var domain = domainOf(id);
+		if (domain === "alarm_control_panel") { openAlarm(id); return false; }
+		if (actionOf(id) === "open") { openDetail(id); return false; }
+		var question = confirmed === true ? "" : confirmQuestion(id);
+		if (question !== "") {
+			qdialog.showDialog(qdialog.SizeLarge, "Home Assistant", question, "Annuleren", function() {},
+				domain === "lock" ? "Ontgrendelen" : "Openen", function() { activate(id, true); });
+			return false;
+		}
 		var wasOn = isOn(id);
 		var service = "";
+		// an old-style group has no services of its own: Home Assistant's general turn_on / turn_off
+		var serviceDomain = domain === "group" ? "homeassistant" : domain;
 		if (domain === "button" || domain === "input_button") service = "press";
 		else if (domain === "script" || domain === "scene") service = "turn_on";
 		else if (domain === "lock") service = wasOn ? "lock" : "unlock";
 		else if (domain === "cover") service = wasOn ? "close_cover" : "open_cover";
+		else if (domain === "valve") service = wasOn ? "close_valve" : "open_valve";
 		else if (domain === "vacuum") { service = wasOn ? "turn_off" : "turn_on"; }
 		// on or off as the card shows it, not "toggle": a lamp that is still fading out is "on" for Home Assistant,
 		// so off-and-at-once-on again would switch it off a second time
 		else if (actionOf(id) === "toggle") service = wasOn ? "turn_off" : "turn_on";
-		if (!service) return;
+		if (!service) return false;
 		if (domain === "vacuum" && service === "turn_on") service = "start";
 		if (domain === "vacuum" && service === "turn_off") service = "return_to_base";
 
 		// show the new state at once, HA's answer follows with the next poll
 		if (actionOf(id) === "toggle" && haStates[id]) {
 			var map = haStates;
-			var guess = {lock: wasOn ? "locked" : "unlocked", cover: wasOn ? "closing" : "opening"}[domain] || (wasOn ? "off" : "on");
+			var guess = {lock: wasOn ? "locked" : "unlocked", cover: wasOn ? "closing" : "opening", valve: wasOn ? "closing" : "opening"}[domain]
+				|| (wasOn ? "off" : "on");
 			var before = map[id].state;
 			map[id] = copyState(map[id], {state: guess});
 			haStates = map;
 			hold(id, before);
 			statesUpdated();
 		}
-		request("POST", "/api/services/" + domain + "/" + service, {entity_id: id}, function(text, err) {
-			if (text === null) { lastError = "Schakelen mislukt: " + err; release(id); }
-			actionResult(id, text !== null, text !== null ? "" : friendlyError(err));
+		request("POST", "/api/services/" + serviceDomain + "/" + service, {entity_id: id}, function(text, errorText) {
+			if (text === null) { lastError = "Schakelen mislukt: " + errorText; release(id); }
+			actionResult(id, text !== null, text !== null ? "" : friendlyError(errorText));
 			refreshSoon.restart();
 		});
+		return true;
 	}
 
 	function stateText(id) {
@@ -1533,15 +1047,22 @@ App {
 			if (className === "door" || className === "window" || className === "opening" || className === "garage_door") return value === "on" ? "Open" : "Dicht";
 		}
 		if (domain === "climate") {
-			var cur = attr(id, "current_temperature"), target = climateTargetText(id);
-			if (value === "off") return (typeof cur === "number" ? degrees(cur) + " · " : "") + "Uit";
-			return (typeof cur === "number" ? degrees(cur) : hvacModeText(value)) + (target ? " → " + target : "");
+			var currentTemperature = attr(id, "current_temperature"), target = climateTargetText(id);
+			if (value === "off") return (typeof currentTemperature === "number" ? degrees(currentTemperature) + " · " : "") + "Uit";
+			return (typeof currentTemperature === "number" ? degrees(currentTemperature) : hvacModeText(value)) + (target ? " → " + target : "");
 		}
 		if (domain === "humidifier") {
-			var hum = attr(id, "current_humidity");
-			if (value !== "on") return (typeof hum === "number" ? Math.round(hum) + "% · " : "") + "Uit";
-			return (typeof hum === "number" ? Math.round(hum) + "%" : "Aan") + (typeof attr(id, "humidity") === "number" ? " → " + Math.round(attr(id, "humidity")) + "%" : "");
+			var currentHumidity = attr(id, "current_humidity");
+			if (value !== "on") return (typeof currentHumidity === "number" ? Math.round(currentHumidity) + "% · " : "") + "Uit";
+			return (typeof currentHumidity === "number" ? Math.round(currentHumidity) + "%" : "Aan") + (typeof attr(id, "humidity") === "number" ? " → " + Math.round(attr(id, "humidity")) + "%" : "");
 		}
+		if (domain === "water_heater") {
+			var waterNow = attr(id, "current_temperature"), waterTarget = climateTargetText(id);
+			if (value === "off") return (typeof waterNow === "number" ? degrees(waterNow) + " · " : "") + "Uit";
+			return (typeof waterNow === "number" ? degrees(waterNow) : waterHeaterModeText(value)) + (waterTarget ? " → " + waterTarget : "");
+		}
+		if (domain === "timer") return timerText(id, value);
+		if (domain === "sensor" && deviceClass(id) === "timestamp") return momentText(parseTime(value)) || value;
 		if (domain === "weather") return (typeof attr(id, "temperature") === "number" ? degrees(attr(id, "temperature")) + " " : "") + weatherConditionText(value);
 		if (domain === "media_player") {
 			if (value === "playing" || value === "paused") {
@@ -1557,8 +1078,8 @@ App {
 			idle: "Inactief", heat: "Verwarmen", cool: "Koelen", auto: "Auto", detected: "Gedetecteerd", clear: "Vrij"};
 		if (domain === "light" && value === "on" && entry.light && entry.light.dimmable && entry.light.brightness > 0) return "Aan " + lightPercent(id) + "%";
 		if (domain === "fan" && value === "on") {
-			var pct = attr(id, "percentage"), preset = attr(id, "preset_mode");
-			if (typeof pct === "number" && pct > 0 && fanSupports(id, "speed")) return "Aan " + Math.round(pct) + "%";
+			var percentage = attr(id, "percentage"), preset = attr(id, "preset_mode");
+			if (typeof percentage === "number" && percentage > 0 && fanSupports(id, "speed")) return "Aan " + Math.round(percentage) + "%";
 			return preset ? "Aan · " + presetText(preset) : "Aan";
 		}
 		if (words[value] && entry.unit === "") return words[value];
@@ -1569,6 +1090,33 @@ App {
 			return i18n.number(number, digits, i18n.omit_trail_zeros) + (entry.unit ? " " + entry.unit : "");
 		}
 		return value + (entry.unit ? " " + entry.unit : "");
+	}
+
+	// a moment as the cards say it: "10:42" (today), "morgen 10:42", "gisteren 10:42", "14-11 10:42"; "" for no date
+	function momentText(moment) {
+		if (!moment || isNaN(moment.getTime())) return "";
+		var now = new Date();
+		var clock = pad2(moment.getHours()) + ":" + pad2(moment.getMinutes());
+		var dayStart = new Date(moment.getFullYear(), moment.getMonth(), moment.getDate()).getTime();
+		var todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+		var daysAway = Math.round((dayStart - todayStart) / (24 * 3600 * 1000));
+		if (daysAway === 0) return clock;
+		if (daysAway === 1) return "morgen " + clock;
+		if (daysAway === -1) return "gisteren " + clock;
+		return moment.getDate() + "-" + (moment.getMonth() + 1) + " " + clock;
+	}
+
+	// a timer: "Loopt tot 10:42", "Pauze · 4:32 over", "Inactief"
+	function timerText(id, value) {
+		if (value === "active") {
+			var finishes = momentText(parseTime(attr(id, "finishes_at")));
+			return finishes ? "Loopt tot " + finishes : "Loopt";
+		}
+		if (value === "paused") {
+			var remaining = String(attr(id, "remaining") || "").replace(/^0:0?/, "");      // "0:04:32" -> "4:32"
+			return remaining ? "Pauze · " + remaining + " over" : "Pauze";
+		}
+		return value === "idle" ? "Inactief" : value;
 	}
 
 	// ======================================================================
@@ -1593,7 +1141,7 @@ App {
 			{bit: 4, mode: "arm_night", label: "Nacht"}, {bit: 32, mode: "arm_vacation", label: "Vakantie"},
 			{bit: 16, mode: "arm_custom_bypass", label: "Aangepast"}];
 		var out = [];
-		for (var i = 0; i < all.length; i++) if (features & all[i].bit) out.push({mode: all[i].mode, label: all[i].label});
+		for (var index = 0; index < all.length; index++) if (features & all[index].bit) out.push({mode: all[index].mode, label: all[index].label});
 		if (out.length === 0) out.push({mode: "arm_away", label: "Afwezig"}, {mode: "arm_home", label: "Thuis"});   // features unknown
 		out.push({mode: "disarm", label: "Uitschakelen"});
 		return out;
@@ -1612,12 +1160,12 @@ App {
 	function alarmCommand(id, mode, code, onDone) {
 		var body = {entity_id: id};
 		if (code) body.code = code;
-		request("POST", "/api/services/alarm_control_panel/alarm_" + mode, body, function(text, err) {
+		request("POST", "/api/services/alarm_control_panel/alarm_" + mode, body, function(text, errorText) {
 			if (text === null) {
-				lastError = "Alarm: " + err;
-				var msg = err === "HTTP 400" || err === "HTTP 500" ? "Geweigerd (verkeerde code?)" : err;
-				if (onDone) onDone(false, msg);
-				actionResult(id, false, msg);
+				lastError = "Alarm: " + errorText;
+				var messageText = errorText === "HTTP 400" || errorText === "HTTP 500" ? "Geweigerd (verkeerde code?)" : errorText;
+				if (onDone) onDone(false, messageText);
+				actionResult(id, false, messageText);
 			} else {
 				if (onDone) onDone(true, "");
 				actionResult(id, true, "");
@@ -1656,7 +1204,7 @@ App {
 		if (!held) return;
 		var haState = map[id].state, expected = held.entry ? held.entry.state : haState;
 		var done = Date.now() >= held.until || !held.entry
-			|| (expected !== held.before && (haState === expected || (["cover", "lock"].indexOf(domainOf(id)) >= 0 && haState !== held.before)));
+			|| (expected !== held.before && (haState === expected || (["cover", "lock", "valve"].indexOf(domainOf(id)) >= 0 && haState !== held.before)));
 		// expected === before (a brightness or volume change, or off and on again): held until the time is up
 		if (done) release(id);
 		else map[id] = held.entry;
@@ -1664,7 +1212,7 @@ App {
 
 	function copyState(source, changes) {
 		var out = {};
-		for (var k in source) out[k] = source[k];
+		for (var sourceKey in source) out[sourceKey] = source[sourceKey];
 		for (var key in changes) out[key] = changes[key];
 		return out;
 	}
@@ -1675,9 +1223,9 @@ App {
 		var modes = attributes[1] || [];
 		var colorModes = ["hs", "xy", "rgb", "rgbw", "rgbww"];
 		var color = false, dimmable = false;
-		for (var i = 0; i < modes.length; i++) {
-			if (colorModes.indexOf(modes[i]) >= 0) color = true;
-			if (modes[i] !== "onoff") dimmable = true;
+		for (var index = 0; index < modes.length; index++) {
+			if (colorModes.indexOf(modes[index]) >= 0) color = true;
+			if (modes[index] !== "onoff") dimmable = true;
 		}
 		return {brightness: attributes[0] || 0, dimmable: dimmable, color: color, colorTemp: modes.indexOf("color_temp") >= 0,
 			hue: attributes[2] ? attributes[2][0] : 0, saturation: attributes[2] ? attributes[2][1] : 0, kelvin: attributes[3] || 0,
@@ -1728,9 +1276,9 @@ App {
 
 	function lightService(id, service, data) {
 		data.entity_id = id;
-		request("POST", "/api/services/light/" + service, data, function(text, err) {
-			if (text === null) { lastError = "Lamp: " + err; release(id); }
-			actionResult(id, text !== null, text !== null ? "" : friendlyError(err));
+		request("POST", "/api/services/light/" + service, data, function(text, errorText) {
+			if (text === null) { lastError = "Lamp: " + errorText; release(id); }
+			actionResult(id, text !== null, text !== null ? "" : friendlyError(errorText));
 			refreshSoon.restart();
 		});
 	}
@@ -1755,8 +1303,10 @@ App {
 	// the screen of a thermostat, humidifier, speaker, camera or person
 	function openDetail(id) {
 		var domain = domainOf(id);
-		var url = {fan: fanScreenUrl, climate: climateScreenUrl, humidifier: climateScreenUrl, media_player: mediaScreenUrl, camera: cameraScreenUrl,
-			person: personScreenUrl, device_tracker: personScreenUrl}[domain];
+		var url = {fan: fanScreenUrl, climate: climateScreenUrl, humidifier: climateScreenUrl, water_heater: climateScreenUrl,
+			media_player: mediaScreenUrl, camera: cameraScreenUrl, person: personScreenUrl, device_tracker: personScreenUrl,
+			select: inputScreenUrl, input_select: inputScreenUrl, number: inputScreenUrl, input_number: inputScreenUrl,
+			timer: timerScreenUrl, counter: inputScreenUrl}[domain];
 		if (url) stage.openFullscreen(url, {entityId: id});
 	}
 
@@ -1779,9 +1329,9 @@ App {
 		}
 		data = data || {};
 		data.entity_id = id;
-		request("POST", "/api/services/" + domain + "/" + name, data, function(text, err) {
-			if (text === null) { lastError = domain + ": " + err; release(id); }
-			actionResult(id, text !== null, text !== null ? "" : friendlyError(err));
+		request("POST", "/api/services/" + domain + "/" + name, data, function(text, errorText) {
+			if (text === null) { lastError = domain + ": " + errorText; release(id); }
+			actionResult(id, text !== null, text !== null ? "" : friendlyError(errorText));
 			refreshSoon.restart();
 		});
 	}
@@ -1817,6 +1367,35 @@ App {
 	function climateSetMode(id, mode) { service(id, "climate", "set_hvac_mode", {hvac_mode: mode}, mode, null); }
 	function climateSetPreset(id, preset) { service(id, "climate", "set_preset_mode", {preset_mode: preset}, null, {preset_mode: preset}); }
 
+	// a water heater (boiler): its target and its way of heating (operation mode)
+	function waterHeaterModeText(mode) {
+		return {off: "Uit", eco: "Eco", electric: "Elektrisch", performance: "Krachtig", high_demand: "Veel vraag",
+			heat_pump: "Warmtepomp", gas: "Gas"}[mode] || presetText(mode);
+	}
+	function waterHeaterSetTemperature(id, temperature) { service(id, "water_heater", "set_temperature", {temperature: temperature}, null, {temperature: temperature}); }
+	function waterHeaterSetMode(id, mode) { service(id, "water_heater", "set_operation_mode", {operation_mode: mode}, mode, {operation_mode: mode}); }
+
+	// a timer's screen: command is start, pause, finish (as if its time was up) or cancel
+	function timerCommand(id, command) {
+		service(id, "timer", command, {}, {start: "active", pause: "paused", finish: "idle", cancel: "idle"}[command], null);
+	}
+
+	// a counter: command is increment, decrement (by the counter's own step, within its minimum and maximum)
+	// or reset (back to its initial value). The new count shows at once
+	function counterCommand(id, command) {
+		var count = haStates[id] ? parseFloat(haStates[id].state) : NaN;
+		var countStep = typeof attr(id, "step") === "number" ? attr(id, "step") : 1;
+		var next = command === "reset" ? attr(id, "initial") : count + (command === "increment" ? countStep : -countStep);
+		if (typeof attr(id, "minimum") === "number") next = Math.max(attr(id, "minimum"), next);
+		if (typeof attr(id, "maximum") === "number") next = Math.min(attr(id, "maximum"), next);
+		service(id, "counter", command, {}, typeof next === "number" && !isNaN(next) ? String(next) : null, null);
+	}
+	function counterSetValue(id, value) { service(id, "counter", "set_value", {value: Math.round(value)}, String(Math.round(value)), null); }
+
+	// a choice (select, input_select) and a number that can be set (number, input_number)
+	function selectOption(id, option) { service(id, domainOf(id), "select_option", {option: option}, option, null); }
+	function numberSetValue(id, value) { service(id, domainOf(id), "set_value", {value: value}, String(value), null); }
+
 	// a fan's features (HA's supported_features bits)
 	function fanSupports(id, what) {
 		var features = haStates[id] ? haStates[id].features : 0;
@@ -1833,14 +1412,14 @@ App {
 		return typeof step === "number" && step > 0 ? step : 10;
 	}
 	// percent 0..100 (0 switches off), rounded to the fan's own steps
-	function fanSetPercentage(id, pct) {
+	function fanSetPercentage(id, percentage) {
 		var step = fanStep(id);
-		pct = Math.max(0, Math.min(100, Math.round(Math.round(pct / step) * step)));
-		service(id, "fan", "set_percentage", {percentage: pct}, pct > 0 ? "on" : "off", {percentage: pct});
+		percentage = Math.max(0, Math.min(100, Math.round(Math.round(percentage / step) * step)));
+		service(id, "fan", "set_percentage", {percentage: percentage}, percentage > 0 ? "on" : "off", {percentage: percentage});
 	}
 	function fanSetPreset(id, preset) { service(id, "fan", "set_preset_mode", {preset_mode: preset}, "on", {preset_mode: preset}); }
 	function fanOscillate(id, oscillating) { service(id, "fan", "oscillate", {oscillating: oscillating}, null, {oscillating: oscillating}); }
-	function fanDirection(id, dir) { service(id, "fan", "set_direction", {direction: dir}, null, {direction: dir}); }
+	function fanDirection(id, direction) { service(id, "fan", "set_direction", {direction: direction}, null, {direction: direction}); }
 	function fanPower(id, turnOn) { service(id, "fan", turnOn ? "turn_on" : "turn_off", {}, turnOn ? "on" : "off", null); }
 	function openFan(id) { stage.openFullscreen(fanScreenUrl, {entityId: id}); }
 
@@ -1974,12 +1553,12 @@ App {
 	// the Toon's firewall lets only known ports in: add ours (active after "Flush firewall rules" or a reboot)
 	function openFirewallPort() {
 		try {
-			var conf = iptablesFile.read();
-			if (!conf || conf.indexOf("--dport " + webPort + " ") >= 0) return;
+			var firewallRules = iptablesFile.read();
+			if (!firewallRules || firewallRules.indexOf("--dport " + webPort + " ") >= 0) return;
 			var rule = "-A HCB-INPUT -p tcp -m tcp --dport " + webPort + " --tcp-flags SYN,RST,ACK SYN -j ACCEPT\n";
-			var position = conf.indexOf("-A HCB-INPUT -p tcp -m tcp --tcp-flags SYN,RST,ACK SYN -j DROP");
+			var position = firewallRules.indexOf("-A HCB-INPUT -p tcp -m tcp --tcp-flags SYN,RST,ACK SYN -j DROP");
 			if (position < 0) return;
-			iptablesFile.write(conf.substring(0, position) + rule + conf.substring(position));
+			iptablesFile.write(firewallRules.substring(0, position) + rule + firewallRules.substring(position));
 			console.log("homeassistant: port " + webPort + " added to iptables.conf (active after \"Flush firewall rules\" or a reboot)");
 		} catch (error) {}
 	}
@@ -1988,21 +1567,21 @@ App {
 	function findToonAddress() {
 		// /proc/net/fib_trie: "|-- 192.168.1.23" followed by "/32 host LOCAL"
 		try {
-			var fib = fibFile.read().split("\n");
-			for (var line = 1; line < fib.length; line++) {
-				if (fib[line].indexOf("/32 host LOCAL") < 0) continue;
-				var match = fib[line - 1].match(/(\d+)\.(\d+)\.(\d+)\.(\d+)\s*$/);
+			var routeLines = fibFile.read().split("\n");
+			for (var line = 1; line < routeLines.length; line++) {
+				if (routeLines[line].indexOf("/32 host LOCAL") < 0) continue;
+				var match = routeLines[line - 1].match(/(\d+)\.(\d+)\.(\d+)\.(\d+)\s*$/);
 				if (match && match[1] !== "127" && match[1] !== "0") return match[1] + "." + match[2] + "." + match[3] + "." + match[4];
 			}
 		} catch (error) {}
 		try {
 			var lines = tcpFile.read().split("\n");
-			for (var i = 1; i < lines.length; i++) {
-				var parts = lines[i].trim().split(/\s+/);
+			for (var index = 1; index < lines.length; index++) {
+				var parts = lines[index].trim().split(/\s+/);
 				if (parts.length < 4 || parts[3] !== "01") continue;      // established connections know our address
-				var hex = parts[1].split(":")[0];
-				if (hex.length !== 8) continue;
-				var address = [parseInt(hex.substr(6, 2), 16), parseInt(hex.substr(4, 2), 16), parseInt(hex.substr(2, 2), 16), parseInt(hex.substr(0, 2), 16)];
+				var hexAddress = parts[1].split(":")[0];
+				if (hexAddress.length !== 8) continue;
+				var address = [parseInt(hexAddress.substr(6, 2), 16), parseInt(hexAddress.substr(4, 2), 16), parseInt(hexAddress.substr(2, 2), 16), parseInt(hexAddress.substr(0, 2), 16)];
 				if (address[0] === 127 || address[0] === 0) continue;
 				return address.join(".");
 			}
@@ -2034,7 +1613,7 @@ App {
 			tabs: defaultTabChoices(),
 			tileEntities: tileEntities,
 			energy: energy,
-			energyFields: energyFields(),
+			energyFields: energyData.energyFields(),
 			entities: entities,
 			areas: areaNames,
 			allVersion: allVersion,              // the list of all entities comes apart ("entities"), only when the page's copy is older
@@ -2042,22 +1621,37 @@ App {
 		});
 	}
 
-	function sendTo(socket, msg) {
+	function sendTo(socket, messageText) {
 		try {
-			if (socket && socket.status === WebSocket.Open) { socket.sendTextMessage(msg); return true; }
+			if (socket && socket.status === WebSocket.Open) { socket.sendTextMessage(messageText); return true; }
 		} catch (error) {}
 		return false;
 	}
 
 	function broadcastState() {
-		var msg = stateMessage();
-		for (var i = 0; i < wsClients.length; i++) sendTo(wsClients[i], msg);
+		if (wsClients.length === 0) return;          // no web editor open: nothing to put together
+		var messageText = stateMessage();
+		for (var index = 0; index < wsClients.length; index++) sendTo(wsClients[index], messageText);
 	}
 
 	function dropClient(socket) {
 		var list = [];
-		for (var i = 0; i < wsClients.length; i++) if (wsClients[i] !== socket) list.push(wsClients[i]);
+		for (var index = 0; index < wsClients.length; index++) if (wsClients[index] !== socket) list.push(wsClients[index]);
 		wsClients = list;
+	}
+
+	// the token for a request from the web editor: the one it sent, else the saved one, but the saved one only
+	// for the saved address. Anyone on the network can reach the web editor's port: with another address and
+	// no token, the saved token would be sent to an address of their choosing. "" = no token to use
+	function webEditorToken(address, sentToken) {
+		var typedToken = typeof sentToken === "string" ? sentToken.trim() : "";
+		if (typedToken !== "") return typedToken;
+		return haUrl !== "" && cleanUrl(address) === haUrl ? haToken : "";
+	}
+
+	function tokenNeededMessage() {
+		return JSON.stringify({type: "test", ok: false, message: haToken === "" ? "Vul het token in"
+			: "Een ander adres: vul het token opnieuw in (het opgeslagen token gaat alleen naar het opgeslagen adres)"});
 	}
 
 	function handleMessage(socket, text) {
@@ -2075,11 +1669,17 @@ App {
 			loadAllEntities();
 			sendTo(socket, stateMessage());
 		} else if (message.type === "test") {
-			testConnection(message.url || haUrl, message.token || haToken, function(ok, msg) {
-				sendTo(socket, JSON.stringify({type: "test", ok: ok, message: msg}));
+			var testAddress = message.url || haUrl;
+			var testToken = webEditorToken(testAddress, message.token);
+			if (testToken === "") { sendTo(socket, tokenNeededMessage()); return; }
+			testConnection(testAddress, testToken, function(ok, messageText) {
+				sendTo(socket, JSON.stringify({type: "test", ok: ok, message: messageText}));
 			});
 		} else if (message.type === "connection") {
-			setConnection(message.url, message.token);
+			var newToken = webEditorToken(message.url, message.token);
+			if (newToken === "") { sendTo(socket, tokenNeededMessage()); return; }
+			setConnection(message.url, newToken);
+			sendTo(socket, JSON.stringify({type: "test", ok: true, message: "opgeslagen, entiteiten worden opgehaald…"}));
 		} else if (message.type === "save") {
 			// answer first, then the work (saving, the screens): the page doesn't wait for the slow part
 			sendTo(socket, JSON.stringify({type: "saved"}));
@@ -2105,7 +1705,7 @@ App {
 				energy = cleanEnergy(save.energy);
 				energyHistory = {};
 				energyHistUntil = 0;
-				loadEnergyHistory();
+				energyData.loadEnergyHistory();
 			}
 			setEntities(save.entities || []);
 		}

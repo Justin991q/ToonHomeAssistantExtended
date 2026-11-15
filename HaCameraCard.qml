@@ -22,7 +22,9 @@ Rectangle {
 		anchors.fill: parent
 		anchors.margins: 1
 		entityId: card.entityId
-		url: card.rev >= 0 && !card.unavailable ? app.cameraUrl(card.entityId, picture.animated) : ""
+		// only while the card can be seen: with the screen closed no picture is fetched every few seconds
+		// (the last one stays, "" changes nothing)
+		url: card.visible && card.rev >= 0 && !card.unavailable ? app.cameraUrl(card.entityId, picture.animated) : ""
 	}
 
 	// name (and state) over the picture

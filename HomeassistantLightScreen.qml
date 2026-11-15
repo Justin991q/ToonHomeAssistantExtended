@@ -62,8 +62,8 @@ Screen {
 	}
 
 	// roughly the colour of white light at this temperature: warm orange to cool blue-white
-	function kelvinColor(k) {
-		var fraction = Math.max(0, Math.min(1, (k - 2000) / 4500));
+	function kelvinColor(kelvin) {
+		var fraction = Math.max(0, Math.min(1, (kelvin - 2000) / 4500));
 		return Qt.rgba(1, 0.62 + 0.33 * fraction, 0.25 + 0.72 * fraction, 1);
 	}
 

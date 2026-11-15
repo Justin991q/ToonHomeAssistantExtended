@@ -21,10 +21,10 @@ Item {
 	// A picture from the network plays once: at its end it starts again (after a short pause, as a radar does)
 	function updatePlaying(restart) {
 		var list = [imageA, imageB];
-		for (var i = 0; i < list.length; i++) {
-			var want = list[i].visible && view.visible && list[i].status === Image.Ready;
-			if (want && restart) list[i].currentFrame = 0;
-			if (list[i].playing !== want) list[i].playing = want;
+		for (var index = 0; index < list.length; index++) {
+			var want = list[index].visible && view.visible && list[index].status === Image.Ready;
+			if (want && restart) list[index].currentFrame = 0;
+			if (list[index].playing !== want) list[index].playing = want;
 		}
 	}
 	Timer { id: loopTimer; interval: 700; onTriggered: view.updatePlaying(true) }

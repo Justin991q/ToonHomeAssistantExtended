@@ -82,7 +82,7 @@ Item {
 
 	function buildGradient() {
 		var list = [];
-		for (var i = 0; i < stops.length; i++) list.push(stopComponent.createObject(grad, {position: stops[i].pos, color: stops[i].color}));
+		for (var index = 0; index < stops.length; index++) list.push(stopComponent.createObject(grad, {position: stops[index].pos, color: stops[index].color}));
 		grad.stops = list;
 	}
 }

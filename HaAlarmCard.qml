@@ -34,7 +34,7 @@ Rectangle {
 		if (armed || triggered || busy) return [{mode: "disarm", label: "Uitschakelen"}];
 		var modes = app.alarmModes(entityId);
 		var out = [];
-		for (var i = 0; i < modes.length && out.length < maxButtons; i++) if (modes[i].mode !== "disarm") out.push(modes[i]);
+		for (var index = 0; index < modes.length && out.length < maxButtons; index++) if (modes[index].mode !== "disarm") out.push(modes[index]);
 		return out;
 	}
 	// as many buttons as fit above each other (at most 3)
