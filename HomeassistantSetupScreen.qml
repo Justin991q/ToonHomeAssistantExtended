@@ -152,13 +152,15 @@ Screen {
 			rev++;
 		}
 	}
+	// the result of "Test verbinding": on a line of its own under the buttons (the row is full)
 	Text {
+		id: testResultText
+		visible: testResult !== ""
 		anchors {
-			verticalCenter: testButton.verticalCenter
-			left: testButton.right
-			leftMargin: 16
-			right: systrayText.left
-			rightMargin: 16
+			top: testButton.bottom
+			topMargin: isNxt ? 10 : 8
+			left: introText.left
+			right: introText.right
 		}
 		elide: Text.ElideRight
 		font.family: qfont.semiBold.name
@@ -194,7 +196,7 @@ Screen {
 		height: 1
 		color: "#d0d0d0"
 		anchors {
-			top: testButton.bottom
+			top: testResultText.visible ? testResultText.bottom : testButton.bottom
 			topMargin: isNxt ? 22 : 16
 			left: introText.left
 			right: introText.right
