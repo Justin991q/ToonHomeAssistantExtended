@@ -227,6 +227,18 @@ Screen {
 		}
 		onClicked: stage.openFullscreen(app.energySetupScreenUrl)
 	}
+	// per area a temperature and a humidity sensor (under the area's name on its tab)
+	StandardButton {
+		id: areaButton
+		text: "Ruimtes"
+		enabled: app.isConfigured()
+		anchors {
+			verticalCenter: chooseButton.verticalCenter
+			left: energyButton.right
+			leftMargin: 16
+		}
+		onClicked: stage.openFullscreen(app.areaSetupScreenUrl)
+	}
 	// the cached list of all entities: forget it and fetch it again (after changes in Home Assistant)
 	StandardButton {
 		id: clearCacheButton
@@ -235,7 +247,7 @@ Screen {
 		enabled: app.isConfigured() && !app.loadingAll
 		anchors {
 			verticalCenter: chooseButton.verticalCenter
-			left: energyButton.right
+			left: areaButton.right
 			leftMargin: 16
 		}
 		onClicked: { cleared = true; app.clearEntitiesCache(); }

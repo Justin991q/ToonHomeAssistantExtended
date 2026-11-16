@@ -52,6 +52,8 @@ App {
 	property url tileSetupScreenUrl: "HomeassistantTileSetupScreen.qml"
 	property HomeassistantEnergySetupScreen homeassistantEnergySetupScreen
 	property url energySetupScreenUrl: "HomeassistantEnergySetupScreen.qml"
+	property HomeassistantAreaSetupScreen homeassistantAreaSetupScreen
+	property url areaSetupScreenUrl: "HomeassistantAreaSetupScreen.qml"
 
 	property HomeassistantScreen homeassistantScreen
 	property url screenUrl: "HomeassistantScreen.qml"
@@ -74,6 +76,8 @@ App {
 	property variant areaOrder: []            // your order of the areas (web editor); areas not in it follow in HA's order. "" is Overig
 	property string defaultTab: "*last"       // the tab the main screen opens on: "*last" (the last one), "*fav", "*energy", an area, "" (Overig)
 	property variant tileEntities: []         // what the tile shows (at most 4, in this order); empty: the favourites
+	// per area the sensors whose temperature and humidity show under the area's name on its tab ("" is Overig)
+	property variant areaSensors: ({})        // {area: {temperature: entity id, humidity: entity id}}
 	// the Energie tab: its own entities, apart from the cards. Every field is a list (summed: e.g. the
 	// two tariffs of a smart meter, or the three phases)
 	property variant energy: ({})             // {power, usage, export, solarPower, solar, gas, water}: [entity ids]
@@ -138,6 +142,7 @@ App {
 		registry.registerWidget("screen", timerScreenUrl, this, "homeassistantTimerScreen");
 		registry.registerWidget("screen", energySetupScreenUrl, this, "homeassistantEnergySetupScreen");
 		registry.registerWidget("screen", tileSetupScreenUrl, this, "homeassistantTileSetupScreen");
+		registry.registerWidget("screen", areaSetupScreenUrl, this, "homeassistantAreaSetupScreen");
 		registry.registerWidget("systrayIcon", trayUrl, this, "homeassistantTray");
 	}
 
@@ -180,6 +185,7 @@ App {
 			areaOrder = saved.areaOrder || [];
 			if (typeof saved.defaultTab === "string") defaultTab = saved.defaultTab;
 			tileEntities = cleanTile(saved.tileEntities || []);
+			areaSensors = cleanAreaSensors(saved.areaSensors || {});
 			energy = cleanEnergy(saved.energy || {});
 			if (saved.mapTileUrl) mapTileUrl = saved.mapTileUrl;
 			if (saved.webPort > 0) webPort = saved.webPort;
@@ -200,6 +206,7 @@ App {
 			areaOrder: areaOrder,
 			defaultTab: defaultTab,
 			tileEntities: tileEntities,
+			areaSensors: areaSensors,
 			energy: energy,
 			mapTileUrl: mapTileUrl,
 			webPort: webPort
@@ -400,6 +407,98 @@ App {
 		if (hasNoArea) areas.push("");                // Overig: last, unless you moved it
 		areas.sort(function(first, second) { return (areaRank(first) - areaRank(second)) || (first < second ? -1 : (first > second ? 1 : 0)); });
 		for (var index = 0; index < areas.length; index++) out.push({key: areas[index], label: areas[index] || "Overig"});
+		return out;
+	}
+
+	// ---- per area: a temperature and a humidity sensor ----
+
+	property variant areaSensorKinds: ["temperature", "humidity"]
+
+	function cleanAreaSensors(source) {
+		var out = {};
+		for (var area in source) {
+			var sensors = source[area] || {};
+			var kept = {}, any = false;
+			for (var kindIndex = 0; kindIndex < areaSensorKinds.length; kindIndex++) {
+				var kind = areaSensorKinds[kindIndex];
+				if (typeof sensors[kind] === "string" && sensors[kind] !== "") { kept[kind] = sensors[kind]; any = true; }
+			}
+			if (any) out[area] = kept;
+		}
+		return out;
+	}
+
+	function areaSensorIds() {
+		var out = [];
+		for (var area in areaSensors) {
+			for (var kindIndex = 0; kindIndex < areaSensorKinds.length; kindIndex++) {
+				var id = areaSensors[area][areaSensorKinds[kindIndex]];
+				if (id && out.indexOf(id) < 0) out.push(id);
+			}
+		}
+		return out;
+	}
+
+	function areaSensor(area, kind) {
+		var sensors = areaSensors[area || ""];
+		return sensors && sensors[kind] ? sensors[kind] : "";
+	}
+
+	// id "" = none
+	function setAreaSensor(area, kind, id) {
+		var settings = {};
+		for (var key in areaSensors) settings[key] = copyState(areaSensors[key], {});
+		if (!settings[area || ""]) settings[area || ""] = {};
+		settings[area || ""][kind] = id;
+		areaSensors = cleanAreaSensors(settings);
+		saveSettings();
+		selectionChanged();
+		pollStates();
+		broadcastState();
+	}
+
+	// does the entity fit as an area's temperature / humidity: its device class, or else its unit
+	function fitsAreaSensor(entity, kind) {
+		if (!entity) return false;
+		if (kind === "temperature") return entity.deviceClass === "temperature" || (!entity.deviceClass && ["°C", "°F", "K"].indexOf(entity.unit) >= 0);
+		return entity.deviceClass === "humidity" || (!entity.deviceClass && entity.unit === "%" && /humid|vocht/i.test(entity.id + " " + entity.name));
+	}
+
+	// "21,3°" / "54%" ("" when there is no sensor or no number yet)
+	function areaSensorText(area, kind) {
+		var id = areaSensor(area, kind);
+		var entry = id ? haStates[id] : null;
+		if (!entry || !/^-?\d+(\.\d+)?$/.test(entry.state)) return "";
+		var value = parseFloat(entry.state);
+		if (kind === "temperature") return entry.unit === "°F" ? i18n.number(value, 0, i18n.omit_trail_zeros) + "°F" : degrees(value);
+		return Math.round(value) + "%";
+	}
+
+	// the line under an area's name: "21,3° · 54%"
+	function areaClimateText(area) {
+		var parts = [];
+		for (var kindIndex = 0; kindIndex < areaSensorKinds.length; kindIndex++) {
+			var text = areaSensorText(area, areaSensorKinds[kindIndex]);
+			if (text) parts.push(text);
+		}
+		return parts.join(" · ");
+	}
+
+	// the areas you can give sensors: the area tabs (with chosen entities), then HA's other areas
+	function sensorAreaList() {
+		var out = [], seen = {};
+		var tabs = tabList();
+		for (var index = 0; index < tabs.length; index++) {
+			if (tabs[index].key.charAt(0) === "*") continue;
+			out.push({key: tabs[index].key, label: tabs[index].label});
+			seen[tabs[index].key] = true;
+		}
+		for (var areaIndex = 0; areaIndex < areaNames.length; areaIndex++) {
+			if (seen[areaNames[areaIndex]]) continue;
+			out.push({key: areaNames[areaIndex], label: areaNames[areaIndex]});
+			seen[areaNames[areaIndex]] = true;
+		}
+		for (var savedArea in areaSensors) if (!seen[savedArea]) out.push({key: savedArea, label: savedArea || "Overig"});
 		return out;
 	}
 
@@ -688,6 +787,8 @@ App {
 		for (var index = 0; index < entities.length; index++) out.push(entities[index].id);
 		var energyList = energyData.energyIds();
 		for (var innerIndex = 0; innerIndex < energyList.length; innerIndex++) if (out.indexOf(energyList[innerIndex]) < 0) out.push(energyList[innerIndex]);
+		var sensorList = areaSensorIds();
+		for (var sensorIndex = 0; sensorIndex < sensorList.length; sensorIndex++) if (out.indexOf(sensorList[sensorIndex]) < 0) out.push(sensorList[sensorIndex]);
 		return out;
 	}
 
@@ -916,7 +1017,7 @@ App {
 		areaNames = areas;
 		allVersion = version;
 		var compact = [];
-		for (var listIndex = 0; listIndex < list.length; listIndex++) compact.push([list[listIndex].id, list[listIndex].name, list[listIndex].area, list[listIndex].state, list[listIndex].unit]);
+		for (var listIndex = 0; listIndex < list.length; listIndex++) compact.push([list[listIndex].id, list[listIndex].name, list[listIndex].area, list[listIndex].state, list[listIndex].unit, list[listIndex].deviceClass]);
 		allMessage = JSON.stringify({type: "entities", app: "homeassistantExtended", version: version, list: compact});
 	}
 
@@ -1612,6 +1713,7 @@ App {
 			defaultTab: defaultTab,
 			tabs: defaultTabChoices(),
 			tileEntities: tileEntities,
+			areaSensors: areaSensors,
 			energy: energy,
 			energyFields: energyData.energyFields(),
 			entities: entities,
@@ -1701,6 +1803,7 @@ App {
 			if (save.areaOrder) areaOrder = save.areaOrder;
 			if (typeof save.defaultTab === "string") defaultTab = save.defaultTab;
 			if (save.tileEntities) tileEntities = cleanTile(save.tileEntities);
+			if (save.areaSensors) areaSensors = cleanAreaSensors(save.areaSensors);
 			if (save.energy) {
 				energy = cleanEnergy(save.energy);
 				energyHistory = {};

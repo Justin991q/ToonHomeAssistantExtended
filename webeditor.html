@@ -28,7 +28,11 @@ main { max-width: 1280px; margin: 0 auto; padding: 16px; display: grid; gap: 16p
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
 .card h2 { font-size: 16px; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
 .card h2 .count { color: var(--muted); font-weight: normal; }
-#connection, #energyCard { grid-column: 1 / -1; }
+#connection, #energyCard, #areaCard { grid-column: 1 / -1; }
+.asensors { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(0, 2fr) minmax(0, 2fr); gap: 6px 12px; align-items: center; }
+.asensors .head { font-size: 12px; color: var(--muted); }
+.asensors .name { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asensors select { width: 100%; min-width: 0; }
 .efields { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px 20px; }
 .efield { border-top: 1px solid var(--line); padding-top: 8px; min-width: 0; }
 .efield .lbl { font-weight: 600; font-size: 14px; }
@@ -97,8 +101,11 @@ body.dragging-on, body.dragging-on * { cursor: grabbing !important; user-select:
 	#tabs .badge { display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 4px; border-radius: 10px; background: var(--accent); color: #fff; font-size: 12px; line-height: 20px; }
 	main { grid-template-columns: 1fr; padding: 12px 12px 96px; gap: 12px; }
 	main > section { display: none; }
-	body[data-view="conn"] #connection, body[data-view="add"] #addCard, body[data-view="chosen"] #chosenCard, body[data-view="energy"] #energyCard { display: block; }
+	body[data-view="conn"] #connection, body[data-view="add"] #addCard, body[data-view="chosen"] #chosenCard, body[data-view="energy"] #energyCard, body[data-view="areas"] #areaCard { display: block; }
 	.efields { grid-template-columns: 1fr; }
+	.asensors { grid-template-columns: 1fr 1fr; }
+	.asensors .name { grid-column: 1 / -1; margin-top: 6px; }
+	.asensors .head { display: none; }
 	.echip button { min-height: 32px; min-width: 32px; }
 	.card { padding: 14px 12px; border-radius: 12px; }
 	.card h2 { font-size: 17px; }
@@ -153,6 +160,7 @@ body.dragging-on, body.dragging-on * { cursor: grabbing !important; user-select:
 	<button data-view="chosen">Gekozen<span class="badge" id="tabChosen">0</span></button>
 	<button data-view="add">Toevoegen</button>
 	<button data-view="energy">Energie</button>
+	<button data-view="areas">Ruimtes</button>
 	<button data-view="conn">Verbinding</button>
 </nav>
 <div id="fwHint" class="hint" hidden>Geen verbinding met de app op de Toon (WebSocket-poort <span id="fwPort"></span>). Druk op de Toon op <b>Instellingen &gt; TSC &gt; Flush firewall rules</b>, dan maakt deze pagina vanzelf verbinding. Een herstart van de Toon is niet nodig.</div>
@@ -220,6 +228,13 @@ body.dragging-on, body.dragging-on * { cursor: grabbing !important; user-select:
 		<div class="efields" id="efields"></div>
 	</section>
 
+	<section class="card" id="areaCard">
+		<h2>Ruimtes: temperatuur en luchtvochtigheid</h2>
+		<p style="margin:0 0 10px;font-size:13px;color:var(--muted)">Per ruimte een sensor voor de temperatuur en een voor de luchtvochtigheid. De Toon toont ze onder de naam van de ruimte op het tabblad, bijvoorbeeld 21,3° · 54%.
+			De sensoren uit de ruimte zelf staan bovenaan.</p>
+		<div class="asensors" id="asensors"></div>
+	</section>
+
 	<div id="savebar">
 		<span class="msg">Niet opgeslagen</span>
 		<button id="undoBtn">Ongedaan</button>
@@ -245,12 +260,13 @@ let defaultTab = "*last"; // working copy: the tab the Toon opens on
 let tileEntities = [];    // working copy: what the tile shows (empty: the favourites)
 let view = null;          // phones: the part shown (chosen, add, energy, conn)
 let energy = {};          // working copy of the Energie tab's entities: {power: [ids], usage: [...], ...}
+let areaSensors = {};     // working copy: per area {temperature: id, humidity: id} ("" = Overig)
 
 // all entities of Home Assistant: big, so the Toon sends them apart, and only when this browser's copy is older
 let allList = [];
 let allVersion = -1;
 const CACHE_KEY = "homeassistantExtended.entities";
-const fromCompact = (rows) => rows.map(row => ({id: row[0], name: row[1], area: row[2], state: row[3], unit: row[4], domain: row[0].split(".")[0]}));
+const fromCompact = (rows) => rows.map(row => ({id: row[0], name: row[1], area: row[2], state: row[3], unit: row[4], deviceClass: row[5] || "", domain: row[0].split(".")[0]}));
 try {
 	const cache = JSON.parse(localStorage.getItem(CACHE_KEY) || "null");
 	if (cache && cache.list) { allList = fromCompact(cache.list); allVersion = cache.version; }
@@ -325,6 +341,7 @@ function onState(message) {
 	if (view === null) setView(!message.url || !message.hasToken ? "conn" : (message.entities.length ? "chosen" : "add"));   // the first message: where to start
 	if (!dirty) chosen = message.entities.map(entity => ({id: entity.id, name: entity.name || "", fav: !!entity.fav}));
 	if (!dirty) energy = JSON.parse(JSON.stringify(message.energy || {}));
+	if (!dirty) areaSensors = JSON.parse(JSON.stringify(message.areaSensors || {}));
 	fillFilters();
 	render();
 }
@@ -351,7 +368,46 @@ function fillFilters() {
 }
 
 // ---- rendering ----
-function render() { renderAll(); renderChosen(); renderEnergy(); renderDefaultTab(); renderTilePick(); }
+function render() { renderAll(); renderChosen(); renderEnergy(); renderDefaultTab(); renderTilePick(); renderAreaSensors(); }
+
+// per area a temperature and a humidity sensor: the area's tabs first (as on the Toon), then HA's other areas
+const SENSOR_KINDS = [{key: "temperature", label: "Temperatuur"}, {key: "humidity", label: "Luchtvochtigheid"}];
+function fitsSensor(entity, kind) {
+	if (kind === "temperature") return entity.deviceClass === "temperature" || (!entity.deviceClass && ["°C", "°F", "K"].includes(entity.unit));
+	return entity.deviceClass === "humidity" || (!entity.deviceClass && entity.unit === "%" && /humid|vocht/i.test(entity.id + " " + (entity.name || "")));
+}
+function renderAreaSensors() {
+	if (!server) return;
+	const areas = chosenGroups().map(group => group.area);
+	server.areas.forEach(area => { if (!areas.includes(area)) areas.push(area); });
+	Object.keys(areaSensors).forEach(area => { if (!areas.includes(area)) areas.push(area); });
+	const all = byId();
+	const head = `<span class="head">Ruimte</span>` + SENSOR_KINDS.map(kind => `<span class="head">${kind.label}</span>`).join("");
+	$("asensors").innerHTML = head + areas.map(area => {
+		const selects = SENSOR_KINDS.map(kind => {
+			const current = (areaSensors[area] || {})[kind.key] || "";
+			// grouped by area: this area's own sensors first ("In <area>"), then the other areas in your order, no area last
+			const fitting = server.all.filter(entity => fitsSensor(entity, kind.key) || entity.id === current);
+			const groups = {};
+			fitting.forEach(entity => { const key = entity.area || ""; (groups[key] = groups[key] || []).push(entity); });
+			const groupOrder = Object.keys(groups).sort((first, second) => (second === area) - (first === area) || areaRank(first) - areaRank(second) || first.localeCompare(second));
+			const optionOf = (entity) => `<option value="${esc(entity.id)}">${esc(entity.name || entity.id)} (${esc(entity.state)}${entity.unit ? " " + esc(entity.unit) : ""})</option>`;
+			const options = groupOrder.map(groupArea => {
+				const label = groupArea === area ? "In " + (area || "Overig") + " (deze ruimte)" : (groupArea || "Geen ruimte");
+				const sorted = groups[groupArea].sort((first, second) => (first.name || first.id).localeCompare(second.name || second.id));
+				return `<optgroup label="${esc(label)}">${sorted.map(optionOf).join("")}</optgroup>`;
+			}).join("");
+			const ownEmpty = groups[area] ? "" : `<optgroup label="In ${esc(area || "Overig")} (deze ruimte)"><option disabled>geen sensoren in deze ruimte</option></optgroup>`;
+			const missing = current && !all[current] ? `<option value="${esc(current)}">${esc(current)}</option>` : "";
+			return `<select data-asensor="${esc(area)}|${kind.key}" aria-label="${kind.label} ${esc(area || "Overig")}"><option value="">– geen –</option>${missing}${ownEmpty}${options}</select>`;
+		}).join("");
+		return `<span class="name" title="${esc(area || "Overig")}">${esc(area || "Overig")}</span>${selects}`;
+	}).join("");
+	document.querySelectorAll("[data-asensor]").forEach(select => {
+		const target = select.dataset.asensor, separator = target.lastIndexOf("|");
+		select.value = (areaSensors[target.slice(0, separator)] || {})[target.slice(separator + 1)] || "";
+	});
+}
 
 // the tile: four choices from the chosen entities; nothing chosen = the favourites
 function renderTilePick() {
@@ -623,8 +679,18 @@ document.querySelector(".tilepick").addEventListener("change", (event) => {
 	tileEntities = kept.filter(Boolean).slice(0, 4);
 	markDirty(); renderTilePick();
 });
+$("asensors").addEventListener("change", (event) => {
+	const target = event.target.dataset.asensor;
+	if (target === undefined) return;
+	const separator = target.lastIndexOf("|");
+	const area = target.slice(0, separator), kind = target.slice(separator + 1);
+	const sensors = Object.assign({}, areaSensors[area] || {});
+	if (event.target.value) sensors[kind] = event.target.value; else delete sensors[kind];
+	if (Object.keys(sensors).length) areaSensors[area] = sensors; else delete areaSensors[area];
+	markDirty();
+});
 $("areaReset").onclick = () => { areaOrder = []; markDirty(); render(); };
-$("saveBtn").onclick = () => send({type: "save", systray: $("systray").checked, areaOrder: areaOrder, defaultTab: defaultTab, tileEntities: tileEntities, energy: energy, entities: chosen.map(choice => ({id: choice.id, name: choice.name.trim(), fav: choice.fav}))});
+$("saveBtn").onclick = () => send({type: "save", systray: $("systray").checked, areaOrder: areaOrder, defaultTab: defaultTab, tileEntities: tileEntities, areaSensors: areaSensors, energy: energy, entities: chosen.map(choice => ({id: choice.id, name: choice.name.trim(), fav: choice.fav}))});
 $("undoBtn").onclick = () => { dirty = false; updateSavebar(); onState(server); };
 $("clearCacheBtn").onclick = () => {
 	try { localStorage.removeItem(CACHE_KEY); } catch (error) {}

@@ -136,7 +136,8 @@ Screen {
 					source: model.key === "*energy" ? Qt.resolvedUrl("drawables/icons/energy-on.svg") : "qrc:/images/star-on.svg"
 					anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
 				}
-				Text {
+				// the name; under it the area's temperature and humidity, when you gave it sensors
+				Column {
 					anchors {
 						left: starIcon.visible ? starIcon.right : parent.left
 						leftMargin: starIcon.visible ? 8 : 12
@@ -144,11 +145,24 @@ Screen {
 						rightMargin: 8
 						verticalCenter: parent.verticalCenter
 					}
-					elide: Text.ElideRight
-					font.family: selected ? qfont.bold.name : qfont.regular.name
-					font.pixelSize: isNxt ? 19 : 15
-					color: selected ? "#7a4500" : "#3c3c3a"
-					text: model.label
+					Text {
+						width: parent.width
+						elide: Text.ElideRight
+						font.family: selected ? qfont.bold.name : qfont.regular.name
+						font.pixelSize: climateText.visible ? (isNxt ? 17 : 14) : (isNxt ? 19 : 15)
+						color: selected ? "#7a4500" : "#3c3c3a"
+						text: model.label
+					}
+					Text {
+						id: climateText
+						visible: text !== ""
+						width: parent.width
+						elide: Text.ElideRight
+						font.family: qfont.regular.name
+						font.pixelSize: isNxt ? 14 : 12
+						color: selected ? "#9a6a2a" : "#8a8a8a"
+						text: model.key.charAt(0) === "*" || homeassistantScreen.rev < 0 ? "" : app.areaClimateText(model.key)
+					}
 				}
 				// how many lights/switches are on here
 				Rectangle {

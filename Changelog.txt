@@ -1,3 +1,9 @@
+1.4.0
+- New: temperature and humidity per area, under the area's name on its tab ("21,3° · 54%"). Choose the sensors
+  under Instellingen > Ruimtes (per area a temperature and a humidity sensor, the area's own first) or in the
+  web editor (Ruimtes). The sensors are grouped by area, the area's own first. They are polled and followed
+  live with the rest
+
 1.3.0
 - New: valves (open/close), timers ("Loopt tot 10:42"; a tap opens the timer's screen with the time left and
   Start, Pauze, Afronden and Annuleren), water heaters (temperature, target, way of heating), numbers that can

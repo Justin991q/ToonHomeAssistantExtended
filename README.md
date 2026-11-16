@@ -12,6 +12,11 @@ the order of the areas. A web editor makes setup easy when there are many entiti
   in your order, **Overig** (entities without an area) last. The number next to an area is how many
   lights and switches are on there. On the right are the cards of that area, 9 per page. Swipe or use the
   arrows; the dots show the page.
+  - **Temperature and humidity per area** (optional): under an area's name on its tab, e.g. *21,3° · 54%*.
+    Choose the sensors under *Instellingen > Ruimtes* (per area a temperature and a humidity sensor, grouped by
+    area with the area's own first; a tap again clears it) or in the web editor. Any sensor will do, also one from
+    another area. The choice offers sensors with device class `temperature` / `humidity` (or, without a
+    device class, a unit °C/°F/K, or % with "humid"/"vocht" in the name).
   - **Tap a card** to switch it (light, switch, fan, cover, lock, valve, group, …), run it (scene, script),
     or press it (button). It lights up in warm yellow when on, and pulses briefly
     until Home Assistant answers. If the command fails, the card goes back and a short notice appears at the bottom.
@@ -186,6 +191,7 @@ In the web editor you can:
 - choose the tab the Toon **opens on** (*Op de Toon openen op*): the last one you used, Favorieten, Energie,
   an area or Overig. On the Toon: *Openen op* on the settings screen (each tap the next choice);
 - choose the entities of the **Energie** tab (a list per part, only entities with a fitting unit);
+- choose per area the **temperature and humidity** sensors shown on its tab (*Ruimtes*);
 - turn the systray icon on or off.
 
 Press **Opslaan op Toon** to save. The Toon updates right away.
@@ -205,7 +211,7 @@ Toon's other local pages.
 ## How it talks to Home Assistant
 
 **Live updates** over Home Assistant's WebSocket API (`ws://<home assistant>/api/websocket`, `wss://` for
-https): the app logs in with the token and subscribes to the chosen entities and the Energie tab's with
+https): the app logs in with the token and subscribes to the chosen entities, the Energie tab's and the areas' sensors with
 `subscribe_entities` (Home Assistant 2022.4 or newer). Home Assistant then sends every change at once. When the
 connection drops, the app polls every `pollSeconds` and connects again (after 2, 4, 8 … seconds, at most a
 minute). With an older Home Assistant it only polls. While live, it still polls every 5 minutes (names, areas).
@@ -309,6 +315,7 @@ Assistant doesn't show in the chooser yet. You don't need it for states: those a
 | `HomeassistantPersonScreen.qml` | a person or device tracker, with the map |
 | `HomeassistantEnergySetupScreen.qml` | the Energie tab's entities, on the Toon |
 | `HomeassistantTileSetupScreen.qml` | what the tile shows, on the Toon |
+| `HomeassistantAreaSetupScreen.qml` | per area the temperature and humidity sensors, on the Toon |
 | `HaMediaCard.qml`, `HaCameraCard.qml`, `HaWeatherCard.qml` | the double cards of a speaker, camera and the weather |
 | `HaEnergyView.qml`, `HaBarChart.qml` | the Energie tab and its bars per hour |
 | `HaCameraImage.qml` | a camera image that renews without flicker |
@@ -332,7 +339,7 @@ Written for the Toon's Qt 5.11, so the QML uses only ES5 JavaScript.
 
 `python tools\run_tests.py homeassistant` (also with `--size toon1`) runs `tests\test_homeassistant.py`
 against a fake Home Assistant: connection test, choosing/renaming/favourites, sorting, switching,
-the main screen (tabs, pages, value cards, tapping a card, the notice after a failed command), the empty
+the main screen (tabs, pages, value cards, temperature and humidity per area, tapping a card, the notice after a failed command), the empty
 screen, the tile, the systray option, alarm panels (the card and the screen) with and without a code,
 light brightness, colour and colour temperature, fans, thermostats and humidifiers, speakers, weather, cameras,
 persons with the map, groups, the question before a lock or garage door opens, valves, timers, numbers
